@@ -228,6 +228,7 @@ impl WorkspaceApp {
         match event {
             TerminalPaneEvent::Exited { .. } => {
                 self.queue_auto_close_terminal_session(session_id, cx);
+                cx.notify();
             }
             // TabHost consumes this signal before ordinary pane delivery.
             TerminalPaneEvent::OutputActivity => {}
@@ -433,7 +434,9 @@ impl WorkspaceApp {
         // Serial sessions report port failures through the same terminal event;
         // keep local transport panes visible so users can inspect the error
         // text and reconnect without recreating the whole tab.
-        if self.serial_terminal_configs.contains_key(&session_id) {
+        if !self.settings_store.settings().terminal.close_on_exit
+            || self.serial_terminal_configs.contains_key(&session_id)
+        {
             return;
         }
         if self.pending_auto_close_terminal_sessions.insert(session_id) {
@@ -466,6 +469,11 @@ impl WorkspaceApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // A setting change before the deferred frame must preserve the exited pane too.
+        if !self.settings_store.settings().terminal.close_on_exit {
+            self.pending_auto_close_terminal_sessions.clear();
+            return;
+        }
         let session_ids: Vec<_> = self.pending_auto_close_terminal_sessions.drain().collect();
         for session_id in session_ids {
             if self.serial_terminal_configs.contains_key(&session_id) {
@@ -616,7 +624,7 @@ impl WorkspaceApp {
     ) {
         let group_id = self.alloc_pane_id(cx);
         let Ok((pane_id, session_id)) =
-            self.create_ssh_terminal_pane_for_existing_node(&node_id, None, true, window, cx)
+            self.create_ssh_terminal_pane_for_existing_node(&node_id, None, true, None, window, cx)
         else {
             return;
         };
@@ -928,6 +936,67 @@ impl WorkspaceApp {
             .into_any_element()
     }
 
+    fn render_exited_ssh_terminal_header(
+        &self,
+        session_id: TerminalSessionId,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let theme = self.tokens.ui;
+        let reconnecting = self
+            .workspace_runtime
+            .read(cx)
+            .terminal_reopen_pending(session_id);
+        let mut button_options = oxideterm_gpui_ui::button::ToolbarButtonOptions::compact_text(
+            oxideterm_gpui_ui::button::ButtonVariant::Secondary,
+            ButtonRadius::Sm,
+            22.0,
+            8.0,
+            self.tokens.metrics.ui_text_xs,
+        );
+        button_options.button.disabled = reconnecting;
+        div()
+            .h(px(28.0))
+            .px(px(8.0))
+            .flex()
+            .items_center()
+            .gap(px(8.0))
+            .bg(self.workspace_chrome_background(theme.bg))
+            .border_b_1()
+            .border_color(rgb(theme.border))
+            .text_size(px(self.tokens.metrics.ui_text_xs))
+            .text_color(rgb(theme.text_muted))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .truncate()
+                    .child(self.i18n.t("terminal.exited_retained")),
+            )
+            .child(
+                oxideterm_gpui_ui::button::toolbar_button(
+                    &self.tokens,
+                    self.i18n.t(if reconnecting {
+                        "connections.monitor.reconnecting"
+                    } else {
+                        "sessions.actions.reconnect"
+                    }),
+                    None,
+                    button_options,
+                )
+                .flex_none()
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(move |this, _, _window, cx| {
+                        if !reconnecting {
+                            this.reopen_ssh_terminal(session_id, cx);
+                        }
+                        cx.stop_propagation();
+                    }),
+                ),
+            )
+            .into_any_element()
+    }
+
     pub(super) fn render_pane_tree(
         &mut self,
         node: &PaneNode,
@@ -1073,12 +1142,21 @@ impl WorkspaceApp {
                     .child(div().flex_1().min_h_0().relative().child(content))
                     .into_any_element()
             }
-            PaneNode::Leaf { pane_id, .. } => {
+            PaneNode::Leaf {
+                pane_id,
+                session_id,
+            } => {
                 let active = Some(*pane_id) == active_pane_id;
                 let Some(pane) = self.tab_host.read(cx).panes().get(pane_id).cloned() else {
                     return div().size_full().into_any_element();
                 };
                 let sync_header = self.render_terminal_sync_member_header(*pane_id, cx);
+                let exited_ssh = !pane.read(cx).lifecycle().is_running()
+                    && self
+                        .workspace_runtime
+                        .read(cx)
+                        .ssh_terminal_node_id(*session_id)
+                        .is_some();
                 let split = tab_id
                     .and_then(|id| self.tab_by_id(id, cx))
                     .and_then(|tab| tab.root_pane.as_ref())
@@ -1087,7 +1165,8 @@ impl WorkspaceApp {
                     terminal_command_bar::TERMINAL_SYNC_HEADER_HEIGHT
                 } else {
                     0.0
-                } + if split { 28.0 } else { 0.0 };
+                } + if split { 28.0 } else { 0.0 }
+                    + if exited_ssh { 28.0 } else { 0.0 };
                 let header = div()
                     .absolute()
                     .top_0()
@@ -1103,7 +1182,10 @@ impl WorkspaceApp {
                             cx,
                         ))
                     })
-                    .children(sync_header);
+                    .children(sync_header)
+                    .when(exited_ssh, |header| {
+                        header.child(self.render_exited_ssh_terminal_header(*session_id, cx))
+                    });
                 div()
                     .id(("workspace-pane", pane_id.0))
                     .size_full()

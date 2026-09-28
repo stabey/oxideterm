@@ -111,6 +111,10 @@ impl SshPtyCore {
             encoding,
             scrollback_lines,
         );
+        // Seed cells before starting the transport; old output must never be replayed as input.
+        if let Some(history) = config.screen_history.take() {
+            parser_state.term.lock().restore_screen_history(history);
+        }
 
         // GPUI owns a backend runtime for SSH-adjacent work; standalone
         // terminal sessions keep this fallback runtime alive for compatibility.

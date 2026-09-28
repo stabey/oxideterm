@@ -1,5 +1,6 @@
 {
   "terminal": {
+    "exited_retained": "El shell ha terminado. Se conserva la salida anterior.",
     "control_bar": {
       "show_controls": "Mostrar controles",
       "hide_controls": "Ocultar controles"

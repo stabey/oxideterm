@@ -950,6 +950,14 @@ impl WorkspaceApp {
                         cx,
                     ),
                     self.card_separator(),
+                    self.checkbox_row(
+                        "settings_view.terminal.close_on_exit",
+                        "settings_view.terminal.close_on_exit_hint",
+                        settings.terminal.close_on_exit,
+                        |settings, enabled| settings.terminal.close_on_exit = enabled,
+                        cx,
+                    ),
+                    self.card_separator(),
                     self.select_setting_row(
                         "settings_view.terminal.encoding",
                         "settings_view.terminal.encoding_hint",

@@ -38,6 +38,14 @@ pub const MIN_COLUMNS: usize = 2;
 /// Minimum number of visible lines.
 pub const MIN_SCREEN_LINES: usize = 1;
 
+/// Screen contents retained across shell lifetimes, without parser or input modes.
+/// Deliberately omit Debug because cells can contain credentials and terminal output.
+pub struct ScreenHistory {
+    primary: Grid<Cell>,
+    alternate: Option<Grid<Cell>>,
+    colors: Colors,
+}
+
 /// Max size of the window title stack.
 const TITLE_STACK_MAX_DEPTH: usize = 4096;
 
@@ -684,6 +692,48 @@ impl<T> Term<T> {
     /// Access to the raw grid data structure.
     pub fn grid(&self) -> &Grid<Cell> {
         &self.grid
+    }
+
+    pub fn screen_history(&self) -> ScreenHistory {
+        let alternate = self.mode.contains(TermMode::ALT_SCREEN);
+        ScreenHistory {
+            primary: if alternate { &self.inactive_grid } else { &self.grid }.clone(),
+            alternate: alternate.then(|| self.grid.clone()),
+            colors: self.colors,
+        }
+    }
+
+    /// Seed a fresh terminal before its new shell produces output.
+    pub fn restore_screen_history(&mut self, history: ScreenHistory)
+    where
+        T: EventListener,
+    {
+        let columns = self.columns();
+        let screen_lines = self.screen_lines();
+        self.grid = history.primary;
+        self.colors = history.colors;
+        self.grid.update_history(self.config.scrolling_history);
+        self.grid.cursor.template = Cell::default();
+        self.grid.cursor.input_needs_wrap = false;
+        self.grid.cursor.charsets = Default::default();
+        self.grid.saved_cursor = Default::default();
+        if let Some(alternate) = history.alternate {
+            // Preserve the last full-screen application's display after the primary history.
+            let lines = self.grid.screen_lines();
+            self.grid.scroll_up(&(Line(0)..Line(lines as i32)), lines);
+            for line in 0..lines {
+                self.grid[Line(line as i32)] = alternate[Line(line as i32)].clone();
+            }
+        }
+        self.grid.resize(true, screen_lines, columns);
+        self.grid.scroll_display(Scroll::Bottom);
+        let last_content_line =
+            (0..screen_lines).rfind(|line| self.grid[Line(*line as i32)].line_length() > 0);
+        self.grid.cursor.point = Point::new(Line(last_content_line.unwrap_or(0) as i32), Column(0));
+        if last_content_line.is_some() {
+            self.linefeed();
+        }
+        self.mark_fully_damaged();
     }
 
     /// Alternate-screen scrolling must not move primary-screen annotations.
@@ -2724,6 +2774,48 @@ mod tests {
     use crate::term::cell::{Cell, Flags};
     use crate::term::test::TermSize;
     use crate::vte::ansi::{self, CharsetIndex, Handler, StandardCharset};
+
+    #[test]
+    fn restored_screen_history_appends_output_and_resets_shell_modes() {
+        let size = TermSize::new(12, 3);
+        for alternate in [false, true] {
+            let mut old = Term::new(Config::default(), &size, VoidListener);
+            let mut parser = ansi::Processor::<ansi::StdSyncHandler>::new();
+            parser.advance(
+                &mut old,
+                b"first\r\nsecond\r\n\x1b[31mthird\x1b[0m\r\nlast\x1b[?1000h",
+            );
+            if alternate {
+                parser.advance(&mut old, b"\x1b[?1049h\x1b[Halt");
+            }
+            let config = Config { scrolling_history: 2, ..Config::default() };
+            let mut restored = Term::new(config, &size, VoidListener);
+            restored.restore_screen_history(old.screen_history());
+            parser.advance(&mut restored, b"new");
+            let lines: Vec<_> = (-(restored.history_size() as i32)..3)
+                .map(|line| {
+                    (0..restored.columns())
+                        .map(|column| restored.grid[Line(line)][Column(column)].c)
+                        .collect::<String>()
+                        .trim_end()
+                        .to_owned()
+                })
+                .collect();
+            let expected = if alternate {
+                vec!["third", "last", "alt", "new", ""]
+            } else {
+                vec!["first", "second", "third", "last", "new"]
+            };
+            assert_eq!(lines, expected, "alternate={alternate}");
+            assert!(!restored.mode.intersects(TermMode::MOUSE_REPORT_CLICK | TermMode::ALT_SCREEN));
+            let colored_line = if alternate { -2 } else { 0 };
+            assert_eq!(
+                restored.grid[Line(colored_line)][Column(0)].fg,
+                Color::Named(NamedColor::Red),
+            );
+            assert_eq!(restored.grid.cursor.template.fg, Cell::default().fg);
+        }
+    }
 
     fn assert_batch_input_matches_scalar(
         size: &TermSize,

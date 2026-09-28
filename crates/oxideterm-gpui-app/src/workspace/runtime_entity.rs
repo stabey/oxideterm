@@ -57,6 +57,7 @@ enum WorkspaceRuntimeLifecycle {
 
 #[derive(Debug)]
 pub(in crate::workspace) struct PendingSshTerminalOpen {
+    pub(in crate::workspace) replace_session: Option<TerminalSessionId>,
     pub(in crate::workspace) node_id: NodeId,
     pub(in crate::workspace) post_connect_command: Option<String>,
     pub(in crate::workspace) mark_used_connection_id: Option<String>,
@@ -540,11 +541,11 @@ impl WorkspaceRuntimeEntity {
         if self.lifecycle != WorkspaceRuntimeLifecycle::Running {
             return QueueSshTerminalOpenOutcome::WorkspaceShuttingDown;
         }
-        let outcome = if let Some(existing) = self
-            .pending_ssh_terminal_opens
-            .iter_mut()
-            .find(|pending| pending.node_id == request.node_id)
-        {
+        let outcome = if let Some(existing) =
+            self.pending_ssh_terminal_opens.iter_mut().find(|pending| {
+                pending.node_id == request.node_id
+                    && pending.replace_session == request.replace_session
+            }) {
             // Preserve the first visible terminal request while adopting later
             // one-shot side effects without cloning secret-bearing save state.
             if existing.mark_used_connection_id.is_none() {
@@ -606,6 +607,15 @@ impl WorkspaceRuntimeEntity {
         self.pending_ssh_terminal_opens
             .retain(|pending| pending.node_id != *node_id);
         self.pending_ssh_terminal_opens.len() != before
+    }
+
+    pub(in crate::workspace) fn terminal_reopen_pending(
+        &self,
+        session_id: TerminalSessionId,
+    ) -> bool {
+        self.pending_ssh_terminal_opens
+            .iter()
+            .any(|request| request.replace_session == Some(session_id))
     }
 
     fn take_ready_ssh_terminal_opens(&mut self) -> Vec<PendingSshTerminalOpen> {
@@ -3686,6 +3696,7 @@ mod tests {
         entity.update(cx, |entity, cx| {
             let first = entity.queue_ssh_terminal_open(
                 PendingSshTerminalOpen {
+                    replace_session: None,
                     node_id: node_id.clone(),
                     post_connect_command: None,
                     mark_used_connection_id: None,
@@ -3697,6 +3708,7 @@ mod tests {
             );
             let second = entity.queue_ssh_terminal_open(
                 PendingSshTerminalOpen {
+                    replace_session: None,
                     node_id: node_id.clone(),
                     post_connect_command: Some("pwd".to_string()),
                     mark_used_connection_id: Some("saved-a".to_string()),
@@ -3721,12 +3733,53 @@ mod tests {
     }
 
     #[gpui::test]
+    fn reconnect_requests_preserve_each_target_terminal(cx: &mut TestAppContext) {
+        let entity = test_runtime_entity(cx);
+        let node_id = NodeId::new("node-reopen");
+        entity.update(cx, |entity, cx| {
+            for replace_session in [
+                None,
+                Some(TerminalSessionId(7)),
+                Some(TerminalSessionId(8)),
+                Some(TerminalSessionId(7)),
+            ] {
+                entity.queue_ssh_terminal_open(
+                    PendingSshTerminalOpen {
+                        replace_session,
+                        node_id: node_id.clone(),
+                        post_connect_command: None,
+                        mark_used_connection_id: None,
+                        save_after_open: None,
+                        cleanup_node_id: None,
+                        title: "Terminal".to_owned(),
+                    },
+                    cx,
+                );
+            }
+            entity.publish_ssh_terminal_opens_for_connected_node(&node_id, cx);
+            let effects = entity.take_runtime_effects(cx);
+            let [WorkspaceRuntimeEffect::OpenReadySshTerminals { requests }] = effects.as_slice()
+            else {
+                panic!("expected one terminal delivery");
+            };
+            assert_eq!(
+                requests
+                    .iter()
+                    .map(|request| request.replace_session)
+                    .collect::<Vec<_>>(),
+                vec![None, Some(TerminalSessionId(7)), Some(TerminalSessionId(8))]
+            );
+        });
+    }
+
+    #[gpui::test]
     fn node_connected_transition_emits_first_terminal_effect_once(cx: &mut TestAppContext) {
         let entity = test_runtime_entity(cx);
         let node_id = NodeId::new("node-ready");
         entity.update(cx, |entity, cx| {
             let outcome = entity.queue_ssh_terminal_open(
                 PendingSshTerminalOpen {
+                    replace_session: None,
                     node_id: node_id.clone(),
                     post_connect_command: None,
                     mark_used_connection_id: None,

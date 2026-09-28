@@ -687,6 +687,10 @@ impl TerminalSession {
         self.backend.buffer_text()
     }
 
+    pub fn screen_history(&self) -> Option<alacritty_terminal::term::ScreenHistory> {
+        self.backend.screen_history()
+    }
+
     pub fn command_output_text(&self, mark: &TerminalCommandMark) -> String {
         self.backend.command_output_text(mark)
     }

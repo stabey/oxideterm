@@ -1,5 +1,6 @@
 {
   "terminal": {
+    "exited_retained": "Die Shell wurde beendet. Die bisherige Ausgabe bleibt erhalten.",
     "control_bar": {
       "show_controls": "Bedienelemente anzeigen",
       "hide_controls": "Bedienelemente ausblenden"

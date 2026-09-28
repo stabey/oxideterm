@@ -744,14 +744,16 @@ mod tests {
         let path = tempdir.path().join("settings.json");
         let mut store = SettingsStore::load_from_path(&path).unwrap();
         store.settings_mut().terminal.font_size = 18;
+        store.settings_mut().terminal.close_on_exit = false;
         store.save().unwrap();
 
         let reloaded = SettingsStore::load_from_path(&path).unwrap();
         assert_eq!(reloaded.settings().terminal.font_size, 18);
+        assert!(!reloaded.settings().terminal.close_on_exit);
         let raw: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
         assert_eq!(raw["version"], SETTINGS_SCHEMA_VERSION);
-        assert!(raw.get("settings").is_some());
+        assert_eq!(raw["settings"]["terminal"]["closeOnExit"], false);
     }
 
     #[test]
