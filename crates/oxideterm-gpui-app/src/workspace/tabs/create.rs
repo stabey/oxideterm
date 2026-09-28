@@ -1787,8 +1787,11 @@ impl WorkspaceApp {
                             self.focus_terminal_session(new_session_id, window, cx);
                             opened = true;
                         }
-                        Err(_) => self.push_reconnect_notice(
-                            self.i18n.t("terminal.processing_failed"),
+                        Err(error) => self.push_reconnect_notice(
+                            self.i18n_with(
+                                "connections.reconnect.failed",
+                                &[("error", error.to_string())],
+                            ),
                             None,
                             TerminalNoticeVariant::Error,
                             cx,
