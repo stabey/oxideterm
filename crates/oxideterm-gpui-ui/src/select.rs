@@ -59,6 +59,7 @@ pub enum SelectAnchorId {
     SettingsLanguage,
     SettingsUpdateChannel,
     SettingsAppearanceTheme,
+    SettingsAppearanceTerminalTheme,
     SettingsAppearanceDensity,
     SettingsAppearanceUiFontSizeSlider,
     SettingsAppearanceBorderRadiusSlider,
@@ -191,6 +192,7 @@ impl SelectAnchorId {
                 | Self::SettingsUpdateProxyMode
                 | Self::SettingsUpdateProxyProtocol
                 | Self::SettingsAppearanceTheme
+                | Self::SettingsAppearanceTerminalTheme
                 | Self::SettingsAppearanceDensity
                 | Self::SettingsAppearanceAnimation
                 | Self::SettingsAppearanceRenderProfile
