@@ -203,17 +203,34 @@ fn tmux_selection_replays_the_first_click_and_release_on_the_new_pane(cx: &mut T
     });
     let (sender, channel) = peer.ready.recv_timeout(Duration::from_secs(10)).unwrap();
     let layout = "80x24,0,0{40x24,0,0,1,39x24,41,0,2}";
-    let bootstrap = format!(
-        "\x1bP1000p%begin 1 1 1\n%end 1 1 1\n%begin 1 2 1\n3.4\n%end 1 2 1\n\
+    // Like real tmux, answer each bootstrap stage only after its commands were written;
+    // replies are matched to commands in write order.
+    let send = |bytes: String| {
+        peer.runtime
+            .block_on(sender.data(channel, bytes.into_bytes()))
+            .unwrap();
+    };
+    let wait_for_commands = |count: usize| {
+        let mut received = 0;
+        while received < count {
+            let (bytes, _) = peer.input.recv_timeout(Duration::from_secs(10)).unwrap();
+            received += bytes.iter().filter(|byte| **byte == b'\n').count();
+        }
+    };
+    send("\x1bP1000p".to_string());
+    wait_for_commands(5);
+    send(format!(
+        "%begin 1 1 1\n%end 1 1 1\n%begin 1 2 1\n3.4\n%end 1 2 1\n\
          %begin 1 3 1\n$1 demo\n%end 1 3 1\n%begin 1 4 1\n@1 0 1 * shell\n%end 1 4 1\n\
-         %begin 1 5 1\n%1 @1 1 40 24 0 0 {layout}\n%2 @1 0 39 24 0 0 {layout}\n%end 1 5 1\n\
-         %begin 1 6 1\n%end 1 6 1\n%begin 1 7 1\n%end 1 7 1\n\
+         %begin 1 5 1\n%1 @1 1 40 24 0 0 {layout}\n%2 @1 0 39 24 0 0 {layout}\n%end 1 5 1\n"
+    ));
+    wait_for_commands(4);
+    send(
+        "%begin 1 6 1\n%end 1 6 1\n%begin 1 7 1\n%end 1 7 1\n\
          %begin 1 8 1\n%1 0 0\n%2 0 0\n%end 1 8 1\n%begin 1 9 1\n$1 @1 %1\n%end 1 9 1\n\
          %output %2 \\033[?1000h\\033[?1006h\n"
+            .to_string(),
     );
-    peer.runtime
-        .block_on(sender.data(channel, bootstrap.into_bytes()))
-        .unwrap();
     let activity = pane.read_with(cx, |pane, _| pane.terminal.lock().activity_receiver());
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
