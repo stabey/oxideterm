@@ -530,8 +530,9 @@ impl<T> Term<T> {
         self.damage.reset(self.columns());
     }
 
+    /// Forces the next damage query to report the full viewport, e.g. after palette changes.
     #[inline]
-    fn mark_fully_damaged(&mut self) {
+    pub fn mark_fully_damaged(&mut self) {
         self.damage.full = true;
     }
 
