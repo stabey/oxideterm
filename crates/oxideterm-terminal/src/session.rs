@@ -329,6 +329,37 @@ mod tests {
     }
 
     #[test]
+    fn ssh_reopen_seeds_history_before_new_output() {
+        let config = || SshSessionConfig::new("127.0.0.1", 9, "nobody");
+        let mut old = SshPtyCore::new_disconnected_for_test(
+            config(),
+            20,
+            3,
+            GraphicsOptions::default(),
+            TerminalEncoding::Utf8,
+            100,
+        );
+        old.parser_state
+            .feed_utf8_terminal_output(b"before\r\ntimeout");
+        let history = old.parser_state.term.lock().screen_history();
+        let mut reopened = SshPtyCore::new_disconnected_for_test(
+            config().with_screen_history(Some(history)),
+            20,
+            3,
+            GraphicsOptions::default(),
+            TerminalEncoding::Utf8,
+            100,
+        );
+        reopened
+            .parser_state
+            .feed_utf8_terminal_output(b"new prompt");
+        assert_eq!(
+            reopened.buffer_text().trim_end(),
+            "before\ntimeout\nnew prompt"
+        );
+    }
+
+    #[test]
     fn ssh_output_events_are_emitted_only_when_enabled() {
         let mut session = SshPtyCore::new_disconnected_for_test(
             SshSessionConfig::new("127.0.0.1", 9, "nobody"),

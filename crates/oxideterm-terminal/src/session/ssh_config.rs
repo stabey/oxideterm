@@ -24,6 +24,7 @@ pub struct SshSessionConfig {
     runtime: Option<Arc<tokio::runtime::Runtime>>,
     defer_pty_until_resize: bool,
     post_connect_command: Option<String>,
+    screen_history: Option<alacritty_terminal::term::ScreenHistory>,
 }
 
 const POST_CONNECT_COMMAND_MAX_BYTES: usize = 8192;
@@ -80,6 +81,7 @@ impl SshSessionConfig {
             runtime: None,
             defer_pty_until_resize: false,
             post_connect_command: None,
+            screen_history: None,
         }
     }
 
@@ -108,6 +110,7 @@ impl SshSessionConfig {
             runtime: None,
             defer_pty_until_resize: false,
             post_connect_command: None,
+            screen_history: None,
         }
     }
 
@@ -173,6 +176,14 @@ impl SshSessionConfig {
         self
     }
 
+    pub fn with_screen_history(
+        mut self,
+        history: Option<alacritty_terminal::term::ScreenHistory>,
+    ) -> Self {
+        self.screen_history = history;
+        self
+    }
+
     pub fn with_post_connect_command(mut self, command: Option<String>) -> Self {
         self.post_connect_command = command.and_then(|command| {
             let command = command.trim().to_string();
@@ -214,6 +225,7 @@ impl From<oxideterm_ssh::SshConfig> for SshSessionConfig {
             runtime: None,
             defer_pty_until_resize: false,
             post_connect_command,
+            screen_history: None,
         }
     }
 }

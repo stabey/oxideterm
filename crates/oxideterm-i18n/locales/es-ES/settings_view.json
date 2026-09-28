@@ -268,6 +268,8 @@
       "show_performance_overlay_hint": "Muestra el nivel de renderizado actual (B=boost/N=normal/I=inactivo), los eventos de escritura por segundo y los bytes pendientes en la esquina del terminal",
       "highlight_tab_on_new_output": "Resaltar pestañas con salida nueva",
       "highlight_tab_on_new_output_hint": "Mostrar con un color destacado el icono y el título de las pestañas de terminal en segundo plano cuando llegue nueva salida",
+      "close_on_exit": "Cerrar terminales automáticamente al salir",
+      "close_on_exit_hint": "Desactiva esta opción para conservar las pestañas, los paneles divididos y la salida cuando termine el shell. El shell seguirá finalizando normalmente.",
       "cursor": "Cursor",
       "cursor_style": "Estilo de cursor",
       "cursor_style_hint": "Forma del cursor de texto",

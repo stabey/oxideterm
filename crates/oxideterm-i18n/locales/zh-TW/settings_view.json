@@ -268,6 +268,8 @@
       "show_performance_overlay_hint": "在終端角落顯示即時渲染檔位（B=高速/N=正常/I=閒置）、每秒寫入事件數和待處理位元組",
       "highlight_tab_on_new_output": "醒目顯示有新輸出的分頁",
       "highlight_tab_on_new_output_hint": "背景終端出現新輸出時，以醒目顏色顯示分頁圖示和標題",
+      "close_on_exit": "終端退出後自動關閉",
+      "close_on_exit_hint": "關閉後，shell 退出時保留分頁、分割窗格及輸出內容。shell 仍會正常退出。",
       "cursor": "游標",
       "cursor_style": "游標樣式",
       "cursor_style_hint": "文字游標的形狀",
