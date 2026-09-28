@@ -157,6 +157,13 @@
       "player_empty": "No playback output yet"
     },
     "session_log": {
+      "save_to_file": "Guardar salida en un archivo…",
+      "choose_save_pane": "Elegir el panel que se guardará",
+      "choose_stop_pane": "Elegir el panel cuya grabación se detendrá",
+      "saving_badge": "Guardando",
+      "paused_badge": "En pausa",
+      "current_pane": "Actual",
+      "pane_picker_hint": "Pasar el cursor o ↑ ↓: vista previa · Intro: elegir · Esc: cancelar",
       "title": "Registro de sesión",
       "started": "Registro de sesión iniciado",
       "start_failed": "No se pudo iniciar el registro de sesión",

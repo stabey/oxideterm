@@ -179,6 +179,9 @@ impl Render for DetachedTabWindow {
                         }
                         return true;
                     }
+                    if session.capture_session_log_menu_key(event, window, cx) {
+                        return true;
+                    }
                     if !session.app_lock.locked
                         && let Some(pane_id) = session
                             .tab_by_id(detached.tab_id, cx)

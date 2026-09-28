@@ -2331,7 +2331,14 @@ impl WorkspaceApp {
 
     pub(super) fn stop_active_terminal_session_log(&mut self, cx: &mut Context<Self>) {
         self.dismiss_terminal_recording_menu();
-        let Some(pane) = self.active_pane(cx) else {
+        let Some(pane_id) = self.active_pane_id(cx) else {
+            return;
+        };
+        self.stop_terminal_session_log(pane_id, cx);
+    }
+
+    pub(super) fn stop_terminal_session_log(&mut self, pane_id: PaneId, cx: &mut Context<Self>) {
+        let Some(pane) = self.tab_host.read(cx).panes().get(&pane_id).cloned() else {
             return;
         };
         let result = pane.update(cx, |pane, cx| pane.stop_session_log(cx));
@@ -2363,7 +2370,13 @@ impl WorkspaceApp {
 
     pub(super) fn open_active_terminal_session_log(&mut self, cx: &mut Context<Self>) {
         self.dismiss_terminal_recording_menu();
-        let Some(pane) = self.active_pane(cx) else {
+        if let Some(pane_id) = self.active_pane_id(cx) {
+            self.open_terminal_session_log(pane_id, cx);
+        }
+    }
+
+    pub(super) fn open_terminal_session_log(&mut self, pane_id: PaneId, cx: &mut Context<Self>) {
+        let Some(pane) = self.tab_host.read(cx).panes().get(&pane_id).cloned() else {
             return;
         };
         let status = pane.read(cx).session_log_status();
@@ -2409,6 +2422,27 @@ impl WorkspaceApp {
                         .as_deref(),
                 )
             });
+        self.open_session_log_directory_path(directory, cx);
+    }
+
+    pub(super) fn open_pane_session_log_directory(
+        &mut self,
+        pane_id: PaneId,
+        cx: &mut Context<Self>,
+    ) {
+        let directory = self
+            .tab_host
+            .read(cx)
+            .panes()
+            .get(&pane_id)
+            .and_then(|pane| pane.read(cx).session_log_status().path)
+            .and_then(|path| path.parent().map(Path::to_path_buf));
+        if let Some(directory) = directory {
+            self.open_session_log_directory_path(directory, cx);
+        }
+    }
+
+    fn open_session_log_directory_path(&mut self, directory: PathBuf, cx: &mut Context<Self>) {
         let result =
             fs::create_dir_all(&directory).and_then(|()| settings::open_path_external(&directory));
         if result.is_err() {

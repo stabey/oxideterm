@@ -8,6 +8,96 @@ use gpui::{
 mod ssh_peer;
 
 #[gpui::test]
+fn session_log_boundaries_preserve_recording_on_the_same_ssh_terminal(cx: &mut TestAppContext) {
+    use crate::session_log::TerminalSessionLogOptions;
+    use oxideterm_settings::TerminalSessionLogFileMode;
+    use std::fs;
+
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("selected.txt");
+    let other_path = directory.path().join("other.txt");
+    let rejected_path = directory.path().join("rejected.txt");
+    let mut peer = ssh_peer::SshPeer::new();
+    let config =
+        SshSessionConfig::from(peer.config.take().unwrap()).with_runtime(peer.runtime.clone());
+    let (pane, cx) = cx.add_window_view(|window, cx| {
+        TerminalPane::new_ssh_with_preferences(
+            config,
+            TerminalUiPreferences {
+                session_log_options: Some(TerminalSessionLogOptions {
+                    directory: directory.path().into(),
+                    directory_template: String::new(),
+                    file_name_template: "automatic.log".into(),
+                    content_template: "{text}".into(),
+                    include_control_sequences: false,
+                    file_mode: TerminalSessionLogFileMode::Unique,
+                    max_file_bytes: None,
+                    retention_days: 0,
+                    context: Default::default(),
+                }),
+                ..Default::default()
+            },
+            window,
+            cx,
+        )
+        .unwrap()
+    });
+    let (sender, channel) = peer.ready.recv_timeout(Duration::from_secs(10)).unwrap();
+    let send_output = |pane: &TerminalPane, text: &str| {
+        peer.runtime
+            .block_on(sender.data(channel, format!("{text}\r\n").into_bytes()))
+            .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        // The parser has accepted the bytes, but the pane has not consumed their output events.
+        while !pane
+            .terminal
+            .lock()
+            .snapshot()
+            .lines
+            .iter()
+            .any(|line| line.text().contains(text))
+        {
+            assert!(
+                Instant::now() < deadline,
+                "SSH output did not reach the parser"
+            );
+            std::thread::sleep(Duration::from_millis(2));
+        }
+    };
+    pane.update(cx, |pane, cx| {
+        pane.start_recording(None, cx);
+        send_output(pane, "before");
+        pane.start_session_log_at_path(path.clone(), cx).unwrap();
+        send_output(pane, "during");
+        assert!(
+            pane.start_session_log_at_path(rejected_path.clone(), cx)
+                .is_err()
+        );
+        pane.stop_session_log(cx).unwrap();
+        send_output(pane, "between");
+        pane.start_session_log_at_path(other_path.clone(), cx)
+            .unwrap();
+        send_output(pane, "second");
+        pane.stop_session_log(cx).unwrap();
+        send_output(pane, "after");
+        pane.tick(cx);
+        let recording = pane.stop_recording(cx).unwrap();
+        let output: String = recording
+            .lines()
+            .skip(1)
+            .filter_map(|line| {
+                let event: serde_json::Value = serde_json::from_str(line).unwrap();
+                (event[1] == "o").then(|| event[2].as_str().unwrap().to_string())
+            })
+            .collect();
+        assert_eq!(output, "before\r\nduring\r\nbetween\r\nsecond\r\nafter\r\n");
+    });
+    assert_eq!(fs::read(&path).unwrap(), b"during\r\n");
+    assert_eq!(fs::read(&other_path).unwrap(), b"second\r\n");
+    assert!(!rejected_path.exists());
+}
+
+#[gpui::test]
 fn busy_ssh_parser_does_not_block_drawing_the_previous_frame(cx: &mut TestAppContext) {
     let mut peer = ssh_peer::SshPeer::new();
     let config =

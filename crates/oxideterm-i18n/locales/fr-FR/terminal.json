@@ -157,6 +157,13 @@
       "player_empty": "No playback output yet"
     },
     "session_log": {
+      "save_to_file": "Enregistrer la sortie dans un fichier…",
+      "choose_save_pane": "Choisir le volet à enregistrer",
+      "choose_stop_pane": "Choisir le volet dont arrêter l’enregistrement",
+      "saving_badge": "En cours",
+      "paused_badge": "En pause",
+      "current_pane": "Actuel",
+      "pane_picker_hint": "Survol ou ↑ ↓ : aperçu · Entrée : choisir · Échap : annuler",
       "title": "Journal de session",
       "started": "Journal de session démarré",
       "start_failed": "Impossible de démarrer le journal de session",

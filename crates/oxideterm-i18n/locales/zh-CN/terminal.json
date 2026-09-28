@@ -245,6 +245,13 @@
       "player_empty": "暂无回放输出"
     },
     "session_log": {
+      "save_to_file": "保存输出到文件…",
+      "choose_save_pane": "选择要保存输出的窗格",
+      "choose_stop_pane": "选择要停止保存的窗格",
+      "saving_badge": "保存中",
+      "paused_badge": "已暂停",
+      "current_pane": "当前窗格",
+      "pane_picker_hint": "悬停或 ↑ ↓ 预览 · 回车选择 · Esc 取消",
       "title": "会话日志",
       "started": "会话日志已开始",
       "start_failed": "无法开始会话日志",

@@ -157,6 +157,13 @@
       "player_empty": "No playback output yet"
     },
     "session_log": {
+      "save_to_file": "Ausgabe in Datei speichern…",
+      "choose_save_pane": "Bereich zum Speichern wählen",
+      "choose_stop_pane": "Bereich zum Beenden der Speicherung wählen",
+      "saving_badge": "Speichert",
+      "paused_badge": "Pausiert",
+      "current_pane": "Aktuell",
+      "pane_picker_hint": "Zeigen oder ↑ ↓: Vorschau · Enter: wählen · Esc: abbrechen",
       "title": "Sitzungsprotokoll",
       "started": "Sitzungsprotokollierung gestartet",
       "start_failed": "Sitzungsprotokollierung konnte nicht gestartet werden",
