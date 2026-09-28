@@ -1,0 +1,29 @@
+name: Sync Upstream Main
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-upstream-main
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Fast-forward main to upstream
+    # Only a fork has an upstream to mirror; the parent repository must never run this.
+    if: github.event.repository.fork
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sync main
+        env:
+          # The built-in token cannot push upstream commits that touch
+          # .github/workflows; a PAT with Contents and Workflows write covers those.
+          GH_TOKEN: ${{ secrets.UPSTREAM_SYNC_TOKEN || github.token }}
+        # Without --force the sync fails instead of discarding commits made on main,
+        # which keeps main a pure mirror and surfaces accidental divergence.
+        run: gh repo sync "${GITHUB_REPOSITORY}" --branch main
