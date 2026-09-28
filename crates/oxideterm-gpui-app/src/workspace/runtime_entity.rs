@@ -582,7 +582,7 @@ impl WorkspaceRuntimeEntity {
         if let Some(pending) = self
             .pending_ssh_terminal_opens
             .iter_mut()
-            .find(|pending| pending.node_id == *node_id)
+            .find(|pending| pending.node_id == *node_id && pending.replace_session.is_none())
         {
             // Only newly materialized direct roots are removed after failure.
             pending.cleanup_node_id = Some(cleanup_node_id);
@@ -593,10 +593,19 @@ impl WorkspaceRuntimeEntity {
         &self,
         node_id: &NodeId,
     ) -> Option<NodeId> {
+        // A reused node that still backs a retained terminal is not temporary;
+        // removing it would strand that tab's reconnect path.
+        if self
+            .terminal_ssh_nodes
+            .values()
+            .any(|session_node_id| session_node_id == node_id)
+        {
+            return None;
+        }
         self.pending_ssh_terminal_opens
             .iter()
-            .find(|pending| pending.node_id == *node_id)
-            .and_then(|pending| pending.cleanup_node_id.clone())
+            .filter(|pending| pending.node_id == *node_id && pending.replace_session.is_none())
+            .find_map(|pending| pending.cleanup_node_id.clone())
     }
 
     pub(in crate::workspace) fn remove_pending_ssh_terminal_opens_for_node(
@@ -3768,6 +3777,53 @@ mod tests {
                     .map(|request| request.replace_session)
                     .collect::<Vec<_>>(),
                 vec![None, Some(TerminalSessionId(7)), Some(TerminalSessionId(8))]
+            );
+        });
+    }
+
+    #[gpui::test]
+    fn failed_open_cleanup_skips_reconnect_requests_and_retained_terminals(
+        cx: &mut TestAppContext,
+    ) {
+        let entity = test_runtime_entity(cx);
+        let node_id = NodeId::new("node-reused");
+        let retained_session = TerminalSessionId(7);
+        entity.update(cx, |entity, cx| {
+            for replace_session in [Some(retained_session), None] {
+                entity.queue_ssh_terminal_open(
+                    PendingSshTerminalOpen {
+                        replace_session,
+                        node_id: node_id.clone(),
+                        post_connect_command: None,
+                        mark_used_connection_id: None,
+                        save_after_open: None,
+                        cleanup_node_id: None,
+                        title: "Terminal".to_owned(),
+                    },
+                    cx,
+                );
+            }
+            entity.mark_pending_ssh_terminal_open_cleanup(&node_id, node_id.clone());
+            assert_eq!(
+                entity
+                    .pending_ssh_terminal_opens
+                    .iter()
+                    .map(|pending| (pending.replace_session, pending.cleanup_node_id.clone()))
+                    .collect::<Vec<_>>(),
+                vec![
+                    (Some(retained_session), None),
+                    (None, Some(node_id.clone()))
+                ]
+            );
+            assert_eq!(
+                entity.pending_ssh_terminal_open_cleanup_for_node(&node_id),
+                Some(node_id.clone())
+            );
+
+            assert!(entity.register_ssh_terminal_session(retained_session, node_id.clone()));
+            assert_eq!(
+                entity.pending_ssh_terminal_open_cleanup_for_node(&node_id),
+                None
             );
         });
     }
