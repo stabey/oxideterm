@@ -179,6 +179,138 @@ pub fn settings_appearance_radius_control(
         .into_any_element()
 }
 
+pub fn settings_application_theme_preview(
+    tokens: &ThemeTokens,
+    ui: AppUiColors,
+    name: String,
+    description: String,
+    i18n: &I18n,
+) -> AnyElement {
+    // Candidate colors stay local to the sample until the user applies them.
+    let preview = ThemeTokens { ui, ..*tokens };
+    let sidebar_item = |key, selected| {
+        oxideterm_gpui_ui::select::select_inline_option_row(&preview, selected, false)
+            .cursor(gpui::CursorStyle::Arrow)
+            .child(div().min_w_0().truncate().child(i18n.t(key)))
+    };
+    div()
+        .w_full()
+        .min_w_0()
+        .mt(px(tokens.metrics.settings_font_preview_margin_top))
+        .rounded(px(tokens.radii.md))
+        .border_1()
+        .border_color(rgb(ui.border))
+        .bg(rgb(ui.bg))
+        .text_size(px(tokens.metrics.ui_text_xs))
+        .text_color(rgb(ui.text))
+        .overflow_hidden()
+        .flex()
+        .flex_col()
+        .child(
+            div()
+                .px(px(tokens.metrics.settings_theme_preview_padding))
+                .py(px(tokens.spacing.two))
+                .bg(rgb(ui.bg_panel))
+                .border_b_1()
+                .border_color(rgb(ui.border))
+                .flex()
+                .flex_col()
+                .gap(px(tokens.spacing.one))
+                .child(div().min_w_0().truncate().child(name))
+                .child(div().text_color(rgb(ui.text_muted)).child(description)),
+        )
+        .child(
+            div()
+                .flex()
+                .child(
+                    div()
+                        .w(relative(0.32))
+                        .flex_none()
+                        .min_w_0()
+                        .p(px(tokens.spacing.two))
+                        .bg(rgb(ui.bg_panel))
+                        .border_r_1()
+                        .border_color(rgb(ui.border))
+                        .flex()
+                        .flex_col()
+                        .gap(px(tokens.spacing.one))
+                        .child(sidebar_item("settings_view.tabs.connections", true))
+                        .child(sidebar_item("settings_view.tabs.terminal", false))
+                        .child(sidebar_item("settings_view.tabs.sftp", false)),
+                )
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .p(px(tokens.metrics.settings_theme_preview_padding))
+                        .flex()
+                        .flex_col()
+                        .items_start()
+                        .gap(px(tokens.spacing.two))
+                        .child(
+                            div()
+                                .text_color(rgb(ui.text_heading))
+                                .font_weight(gpui::FontWeight::MEDIUM)
+                                .child(i18n.t("settings_view.tabs.connections")),
+                        )
+                        .child(
+                            div()
+                                .text_color(rgb(ui.text_muted))
+                                .child(i18n.t("layout.empty.new_connection_hint")),
+                        )
+                        .child(
+                            oxideterm_gpui_ui::button::button_with(
+                                &preview,
+                                i18n.t("layout.empty.new_connection"),
+                                oxideterm_gpui_ui::button::ButtonOptions {
+                                    variant: oxideterm_gpui_ui::button::ButtonVariant::Default,
+                                    size: oxideterm_gpui_ui::button::ButtonSize::Sm,
+                                    ..Default::default()
+                                },
+                            )
+                            .max_w_full()
+                            .cursor(gpui::CursorStyle::Arrow),
+                        ),
+                ),
+        )
+        .into_any_element()
+}
+
+pub fn settings_application_palette_swatch(tokens: &ThemeTokens, ui: AppUiColors) -> Div {
+    div()
+        .flex()
+        .items_center()
+        .gap(px(3.0))
+        .rounded(px(tokens.radii.xs))
+        .border_1()
+        .border_color(rgb(ui.border))
+        .bg(rgb(ui.bg))
+        .px(px(5.0))
+        .py(px(2.0))
+        .child(
+            div()
+                .text_size(px(tokens.metrics.ui_text_xs))
+                .text_color(rgb(ui.text))
+                .child("Aa"),
+        )
+        .child(
+            div()
+                .px(px(5.0))
+                .rounded(px(tokens.radii.xs))
+                .bg(rgb(ui.accent))
+                .text_size(px(tokens.metrics.ui_text_xs))
+                .text_color(rgb(ui.accent_text))
+                .child("Aa"),
+        )
+        .children([ui.bg_panel, ui.border, ui.text_muted].map(|color| {
+            div()
+                .flex_none()
+                .size(px(9.0))
+                .rounded(px(tokens.radii.xs))
+                .bg(rgb(color))
+        }))
+}
+
 pub fn settings_appearance_theme_preview(
     tokens: &ThemeTokens,
     settings: &PersistedSettings,
