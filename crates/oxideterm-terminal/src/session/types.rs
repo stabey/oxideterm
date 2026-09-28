@@ -254,6 +254,9 @@ pub trait TerminalSessionBackend: Send {
     fn buffer_text(&self) -> String {
         String::new()
     }
+    fn screen_history(&self) -> Option<alacritty_terminal::term::ScreenHistory> {
+        None
+    }
     fn command_output_text(&self, _mark: &TerminalCommandMark) -> String {
         String::new()
     }

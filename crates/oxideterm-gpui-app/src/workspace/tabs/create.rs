@@ -1184,6 +1184,7 @@ impl WorkspaceApp {
         let queue_outcome = self.workspace_runtime.update(cx, |runtime, runtime_cx| {
             runtime.queue_ssh_terminal_open(
                 runtime_entity::PendingSshTerminalOpen {
+                    replace_session: None,
                     node_id: node_id.clone(),
                     post_connect_command: None,
                     mark_used_connection_id: None,
@@ -1371,6 +1372,7 @@ impl WorkspaceApp {
         node_id: &NodeId,
         post_connect_command: Option<String>,
         allow_dedicated_connection: bool,
+        previous_session: Option<TerminalSessionId>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Result<(PaneId, TerminalSessionId)> {
@@ -1440,6 +1442,26 @@ impl WorkspaceApp {
             .clone();
         preference_overrides.apply_to(&mut preferences);
         let consumer = ConnectionConsumer::Terminal(session_id.0.to_string());
+        let history = if let Some(previous_session) = previous_session {
+            let old_pane = self
+                .tab_host
+                .read(cx)
+                .terminal_location(previous_session)
+                .and_then(|location| self.tab_host.read(cx).panes().get(&location.pane_id))
+                .ok_or_else(|| anyhow::anyhow!("Previous SSH terminal is unavailable"))?;
+            Some(
+                old_pane
+                    .read(cx)
+                    .shared_session()
+                    .lock()
+                    .screen_history()
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("Previous SSH terminal history is unavailable")
+                    })?,
+            )
+        } else {
+            None
+        };
         let session_config = if dedicated_new_terminal_connection {
             // This zeroizing, secret-bearing snapshot moves directly into the
             // terminal task and is never copied into WorkspaceSshNode UI state.
@@ -1478,6 +1500,7 @@ impl WorkspaceApp {
         // Both policies keep remounted tabs on the deferred PTY boundary
         // so authentication cannot briefly start at a fallback size.
         .with_deferred_pty(true)
+        .with_screen_history(history)
         .with_runtime(self.forwarding_runtime.clone())
         .with_trzsz_policy(preferences.trzsz_policy.clone());
         self.register_existing_ssh_terminal_session(node_id, session_id, cx)?;
@@ -1552,6 +1575,7 @@ impl WorkspaceApp {
             node_id,
             post_connect_command,
             allow_dedicated_connection,
+            None,
             window,
             cx,
         )?;
@@ -1708,6 +1732,7 @@ impl WorkspaceApp {
         let queue_outcome = self.workspace_runtime.update(cx, |runtime, runtime_cx| {
             runtime.queue_ssh_terminal_open(
                 runtime_entity::PendingSshTerminalOpen {
+                    replace_session: None,
                     node_id: node_id.clone(),
                     post_connect_command,
                     mark_used_connection_id,
@@ -1738,6 +1763,41 @@ impl WorkspaceApp {
     ) -> bool {
         let mut opened = false;
         for request in requests {
+            if let Some(session_id) = request.replace_session {
+                // Closing the retained tab while authentication is pending cancels its remount.
+                if self
+                    .tab_host
+                    .read(cx)
+                    .terminal_location(session_id)
+                    .is_some()
+                {
+                    match self.replace_ssh_terminal_session(
+                        &request.node_id,
+                        session_id,
+                        true,
+                        window,
+                        cx,
+                    ) {
+                        Ok(new_session_id) => {
+                            self.start_remote_shell_integration_terminal_gate(
+                                request.node_id.clone(),
+                                false,
+                                cx,
+                            );
+                            self.focus_terminal_session(new_session_id, window, cx);
+                            opened = true;
+                        }
+                        Err(_) => self.push_reconnect_notice(
+                            self.i18n.t("terminal.processing_failed"),
+                            None,
+                            TerminalNoticeVariant::Error,
+                            cx,
+                        ),
+                    }
+                }
+                cx.notify();
+                continue;
+            }
             if self
                 .create_initial_ssh_terminal_tab_for_existing_node(
                     &request.node_id,
