@@ -112,8 +112,37 @@ impl WorkspaceApp {
         settings: &PersistedSettings,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(self.tokens.metrics.settings_page_gap))
+            .children(
+                [ThemeTarget::Application, ThemeTarget::Terminal]
+                    .map(|target| self.appearance_theme_target_card(settings, target, cx)),
+            )
+            .into_any_element()
+    }
+
+    fn appearance_theme_target_card(
+        &self,
+        settings: &PersistedSettings,
+        target: ThemeTarget,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let (title_key, hint_key, select) = match target {
+            ThemeTarget::Application => (
+                "settings_view.appearance.application_theme",
+                "settings_view.appearance.application_theme_hint",
+                SettingsSelect::AppearanceTheme,
+            ),
+            ThemeTarget::Terminal => (
+                "settings_view.appearance.terminal_theme",
+                "settings_view.appearance.color_theme_hint",
+                SettingsSelect::AppearanceTerminalTheme,
+            ),
+        };
         self.appearance_card(
-            self.i18n.t("settings_view.appearance.theme"),
+            self.i18n.t(title_key),
             Some(
                 div()
                     .flex()
@@ -123,28 +152,32 @@ impl WorkspaceApp {
                     .child(self.appearance_action_button(
                         LucideIcon::Upload,
                         self.i18n.t("settings_view.appearance.theme_import"),
-                        cx.listener(|this, _event, _window, cx| {
-                            this.import_theme_from_file(cx);
+                        cx.listener(move |this, _event, _window, cx| {
+                            this.import_theme_from_file(target, cx);
                             cx.stop_propagation();
                         }),
                     ))
-                    .when(is_custom_theme_id(&settings.terminal.theme), |actions| {
-                        actions.child(self.appearance_action_button(
-                            LucideIcon::Pencil,
-                            self.i18n.t("settings_view.custom_theme.edit"),
-                            cx.listener(|this, _event, _window, cx| {
-                                let theme_id =
-                                    this.settings_store.settings().terminal.theme.clone();
-                                this.open_theme_editor(Some(theme_id), cx);
-                                cx.stop_propagation();
-                            }),
-                        ))
-                    })
+                    .when(
+                        is_custom_theme_id(target.selected_id(settings)),
+                        |actions| {
+                            actions.child(self.appearance_action_button(
+                                LucideIcon::Pencil,
+                                self.i18n.t("settings_view.custom_theme.edit"),
+                                cx.listener(move |this, _event, _window, cx| {
+                                    let theme_id = target
+                                        .selected_id(this.settings_store.settings())
+                                        .to_string();
+                                    this.open_theme_editor(target, Some(theme_id), cx);
+                                    cx.stop_propagation();
+                                }),
+                            ))
+                        },
+                    )
                     .child(self.appearance_action_button(
                         LucideIcon::Plus,
                         self.i18n.t("settings_view.custom_theme.create"),
-                        cx.listener(|this, _event, _window, cx| {
-                            this.open_theme_editor(None, cx);
+                        cx.listener(move |this, _event, _window, cx| {
+                            this.open_theme_editor(target, None, cx);
                             cx.stop_propagation();
                         }),
                     ))
@@ -153,15 +186,15 @@ impl WorkspaceApp {
             vec![
                 self.appearance_row(
                     "settings_view.appearance.color_theme",
-                    "settings_view.appearance.color_theme_hint",
+                    hint_key,
                     self.appearance_select_control(
-                        SettingsSelect::AppearanceTheme,
-                        custom_theme_display_name(settings, &settings.terminal.theme),
+                        select,
+                        custom_theme_display_name(settings, target.selected_id(settings)),
                         self.tokens.metrics.settings_select_width,
                         cx,
                     ),
                 ),
-                self.appearance_theme_preview(settings),
+                self.appearance_theme_preview(settings, target),
             ],
         )
     }
@@ -1031,26 +1064,44 @@ impl WorkspaceApp {
     pub(in crate::workspace) fn appearance_theme_preview(
         &self,
         settings: &PersistedSettings,
+        target: ThemeTarget,
     ) -> AnyElement {
-        let previewing = self.open_settings_select == Some(SettingsSelect::AppearanceTheme);
+        let previewing = self
+            .open_settings_select
+            .and_then(SettingsSelect::theme_target)
+            == Some(target);
         let id = if previewing {
             self.settings_theme_preview
                 .as_deref()
-                .unwrap_or(&settings.terminal.theme)
+                .unwrap_or(target.selected_id(settings))
         } else {
-            &settings.terminal.theme
+            target.selected_id(settings)
+        };
+        let name = custom_theme_display_name(settings, id);
+        let preview = match target {
+            ThemeTarget::Application => {
+                let ui = oxideterm_settings_model::theme_ui_colors(settings, id);
+                oxideterm_gpui_settings_view::settings_application_theme_preview(
+                    &self.tokens,
+                    ui,
+                    name,
+                    oxideterm_gpui_settings_view::application_theme_description(id, ui, &self.i18n),
+                    &self.i18n,
+                )
+            }
+            ThemeTarget::Terminal => settings_appearance_theme_preview(
+                &self.tokens,
+                settings,
+                appearance_theme_palette(settings, id),
+                name,
+                &self.i18n,
+            ),
         };
         div()
             .flex()
             .flex_col()
             .gap(px(self.tokens.spacing.two))
-            .child(settings_appearance_theme_preview(
-                &self.tokens,
-                settings,
-                appearance_theme_palette(settings, id),
-                custom_theme_display_name(settings, id),
-                &self.i18n,
-            ))
+            .child(preview)
             .child(
                 div()
                     .text_size(px(self.tokens.metrics.ui_text_xs))
@@ -1706,11 +1757,13 @@ impl WorkspaceApp {
 
     pub(in crate::workspace) fn open_theme_editor(
         &mut self,
+        target: ThemeTarget,
         edit_theme_id: Option<String>,
         cx: &mut Context<Self>,
     ) {
         let editor = theme_editor_from_settings(
             self.settings_store.settings(),
+            target,
             edit_theme_id,
             self.i18n.t("settings_view.custom_theme.new_theme_name"),
         );
@@ -1757,7 +1810,11 @@ impl WorkspaceApp {
         });
     }
 
-    pub(in crate::workspace) fn import_theme_from_file(&mut self, cx: &mut Context<Self>) {
+    pub(in crate::workspace) fn import_theme_from_file(
+        &mut self,
+        target: ThemeTarget,
+        cx: &mut Context<Self>,
+    ) {
         let receiver = cx.prompt_for_paths(PathPromptOptions {
             files: true,
             directories: false,
@@ -1774,7 +1831,7 @@ impl WorkspaceApp {
         };
         let runtime = self.forwarding_runtime.handle().clone();
         self.settings_workspace.update(cx, |settings, cx| {
-            settings.start_theme_import(selection, runtime, cx);
+            settings.start_theme_import(target, selection, runtime, cx);
         });
     }
 
