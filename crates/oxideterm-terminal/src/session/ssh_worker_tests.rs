@@ -1,4 +1,5 @@
 use super::*;
+use crate::TerminalColor;
 use oxideterm_modem_transfer::ModemIo;
 use russh::{ChannelId, server};
 #[path = "../../tests/support/ssh_peer.rs"]
@@ -125,6 +126,53 @@ fn ssh_parses_and_sends_replies_without_ui_drains() {
     fixture.send("\r\n中文 🦀 final\r\n".as_bytes());
     wait_until(|| fixture.terminal.buffer_text().contains("中文 🦀 final"));
     assert!(fixture.terminal.read_pending());
+}
+
+#[test]
+fn ssh_palette_changes_rebuild_rows_and_answer_color_queries() {
+    let mut fixture = Fixture::new();
+    // Leave the cursor on the next row; the cursor row is always reported as damaged.
+    fixture.send(b"\x1b[41mAB\x1b[0m\r\n");
+    wait_until(|| fixture.terminal.buffer_text().contains("AB"));
+    // Consume pending damage so only the palette change can invalidate the settled rows.
+    let settled = fixture
+        .terminal
+        .snapshot_incremental(&fixture.terminal.snapshot());
+    let settled = fixture.terminal.snapshot_incremental(&settled);
+    assert_eq!(
+        settled.lines[0].cells[0].bg,
+        crate::color::OXIDETERM_DARK_THEME.ansi[1]
+    );
+
+    let mut ansi = crate::color::OXIDETERM_DARK_THEME.ansi;
+    ansi[1] = TerminalColor::rgb(0xdc, 0x32, 0x2f);
+    let light = TerminalPalette::new(
+        TerminalColor::rgb(0x65, 0x7b, 0x83),
+        TerminalColor::rgb(0xfd, 0xf6, 0xe3),
+        TerminalColor::rgb(0x58, 0x6e, 0x75),
+        ansi,
+    );
+    fixture.terminal.set_palette(light);
+    let themed = fixture.terminal.snapshot_incremental(&settled);
+    let row = &themed.lines[0].cells;
+    assert_eq!(
+        (row[0].bg, row[1].bg, row[2].bg),
+        (
+            TerminalColor::rgb(0xdc, 0x32, 0x2f),
+            TerminalColor::rgb(0xdc, 0x32, 0x2f),
+            TerminalColor::rgb(0xfd, 0xf6, 0xe3),
+        )
+    );
+
+    fixture.send(b"\x1b]11;?\x07");
+    assert_eq!(
+        fixture
+            .input
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap()
+            .0,
+        b"\x1b]11;rgb:fdfd/f6f6/e3e3\x07"
+    );
 }
 
 #[test]
