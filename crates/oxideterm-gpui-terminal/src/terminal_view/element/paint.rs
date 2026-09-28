@@ -691,7 +691,8 @@ pub(crate) struct TerminalGhostTextSegment {
     pub(crate) cell_stride: usize,
 }
 
-pub(crate) fn paint_ghost_text_run(
+/// Paints overlay text such as ghost text or an IME preedit with per-character grid advances.
+pub(crate) fn paint_grid_text_run(
     run: &BatchedTextRun,
     origin: gpui::Point<Pixels>,
     metrics: &TerminalMetrics,
