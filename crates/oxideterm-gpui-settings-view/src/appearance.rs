@@ -179,23 +179,26 @@ pub fn settings_appearance_radius_control(
         .into_any_element()
 }
 
-pub fn settings_application_theme_preview(
+pub fn settings_appearance_theme_preview(
     tokens: &ThemeTokens,
-    ui: AppUiColors,
-    name: String,
+    settings: &PersistedSettings,
+    application_name: String,
+    terminal_name: String,
     description: String,
     i18n: &I18n,
 ) -> AnyElement {
-    // Candidate colors stay local to the sample until the user applies them.
-    let preview = ThemeTokens { ui, ..*tokens };
+    // The caller resolves the candidate application and terminal palettes independently.
+    // Sharing one frame makes their contrast visible without changing the live workspace.
+    let ui = tokens.ui;
     let sidebar_item = |key, selected| {
-        oxideterm_gpui_ui::select::select_inline_option_row(&preview, selected, false)
+        oxideterm_gpui_ui::select::select_inline_option_row(tokens, selected, false)
             .cursor(gpui::CursorStyle::Arrow)
             .child(div().min_w_0().truncate().child(i18n.t(key)))
     };
     div()
         .w_full()
         .min_w_0()
+        .flex_none()
         .mt(px(tokens.metrics.settings_font_preview_margin_top))
         .rounded(px(tokens.radii.md))
         .border_1()
@@ -216,7 +219,7 @@ pub fn settings_application_theme_preview(
                 .flex()
                 .flex_col()
                 .gap(px(tokens.spacing.one))
-                .child(div().min_w_0().truncate().child(name))
+                .child(div().min_w_0().truncate().child(application_name))
                 .child(div().text_color(rgb(ui.text_muted)).child(description)),
         )
         .child(
@@ -224,7 +227,7 @@ pub fn settings_application_theme_preview(
                 .flex()
                 .child(
                     div()
-                        .w(relative(0.32))
+                        .w(relative(0.28))
                         .flex_none()
                         .min_w_0()
                         .p(px(tokens.spacing.two))
@@ -234,43 +237,74 @@ pub fn settings_application_theme_preview(
                         .flex()
                         .flex_col()
                         .gap(px(tokens.spacing.one))
-                        .child(sidebar_item("settings_view.tabs.connections", true))
-                        .child(sidebar_item("settings_view.tabs.terminal", false))
-                        .child(sidebar_item("settings_view.tabs.sftp", false)),
+                        .child(sidebar_item("settings_view.tabs.connections", false))
+                        .child(sidebar_item("settings_view.tabs.terminal", true))
+                        .child(sidebar_item("settings_view.tabs.sftp", false))
+                        .child(div().flex_1())
+                        .child(
+                            oxideterm_gpui_ui::button::toolbar_button(
+                                tokens,
+                                String::new(),
+                                None,
+                                oxideterm_gpui_ui::button::ToolbarButtonOptions {
+                                    button: oxideterm_gpui_ui::button::ButtonOptions {
+                                        variant: oxideterm_gpui_ui::button::ButtonVariant::Default,
+                                        size: oxideterm_gpui_ui::button::ButtonSize::Sm,
+                                        ..Default::default()
+                                    },
+                                    show_label: false,
+                                    ..Default::default()
+                                },
+                            )
+                            .max_w_full()
+                            .min_w_0()
+                            .cursor(gpui::CursorStyle::Arrow)
+                            .child(
+                                div()
+                                    .min_w_0()
+                                    .truncate()
+                                    .child(i18n.t("layout.empty.new_connection")),
+                            ),
+                        ),
                 )
                 .child(
                     div()
                         .flex_1()
                         .min_w_0()
-                        .p(px(tokens.metrics.settings_theme_preview_padding))
+                        .overflow_hidden()
                         .flex()
                         .flex_col()
-                        .items_start()
-                        .gap(px(tokens.spacing.two))
                         .child(
-                            div()
-                                .text_color(rgb(ui.text_heading))
-                                .font_weight(gpui::FontWeight::MEDIUM)
-                                .child(i18n.t("settings_view.tabs.connections")),
+                            oxideterm_gpui_ui::tabs::tabs_list(tokens)
+                                .rounded_none()
+                                .border_b_1()
+                                .border_color(rgb(ui.border))
+                                .child(
+                                    oxideterm_gpui_ui::tabs::tabs_trigger(
+                                        tokens,
+                                        terminal_name,
+                                        true,
+                                    )
+                                    .min_w_0()
+                                    .truncate()
+                                    .border_b_2()
+                                    .border_color(rgb(ui.accent))
+                                    .text_size(px(tokens.metrics.ui_text_xs))
+                                    .cursor(gpui::CursorStyle::Arrow),
+                                )
+                                .child(
+                                    oxideterm_gpui_ui::tabs::tabs_trigger(
+                                        tokens,
+                                        i18n.t("settings_view.tabs.sftp"),
+                                        false,
+                                    )
+                                    .min_w_0()
+                                    .truncate()
+                                    .text_size(px(tokens.metrics.ui_text_xs))
+                                    .cursor(gpui::CursorStyle::Arrow),
+                                ),
                         )
-                        .child(
-                            div()
-                                .text_color(rgb(ui.text_muted))
-                                .child(i18n.t("layout.empty.new_connection_hint")),
-                        )
-                        .child(
-                            oxideterm_gpui_ui::button::button_with(
-                                &preview,
-                                i18n.t("layout.empty.new_connection"),
-                                oxideterm_gpui_ui::button::ButtonOptions {
-                                    variant: oxideterm_gpui_ui::button::ButtonVariant::Default,
-                                    size: oxideterm_gpui_ui::button::ButtonSize::Sm,
-                                    ..Default::default()
-                                },
-                            )
-                            .max_w_full()
-                            .cursor(gpui::CursorStyle::Arrow),
-                        ),
+                        .child(settings_terminal_theme_sample(tokens, settings, i18n)),
                 ),
         )
         .into_any_element()
@@ -311,54 +345,21 @@ pub fn settings_application_palette_swatch(tokens: &ThemeTokens, ui: AppUiColors
         }))
 }
 
-pub fn settings_appearance_theme_preview(
+fn settings_terminal_theme_sample(
     tokens: &ThemeTokens,
     settings: &PersistedSettings,
-    terminal: TerminalTheme,
-    name: String,
     i18n: &I18n,
 ) -> AnyElement {
     // This is a static terminal sample, so it can live outside WorkspaceApp
     // without knowing anything about panes, sessions, or live terminal state.
+    let terminal = tokens.terminal;
     div()
-        .w_full()
-        .mt(px(tokens.metrics.settings_font_preview_margin_top))
-        .rounded(px(tokens.radii.md))
-        .border_1()
-        .border_color(rgb(tokens.ui.border))
+        .flex_1()
+        .min_w_0()
         .bg(rgb(terminal.background))
         .p(px(tokens.metrics.settings_theme_preview_padding))
         .flex()
         .flex_col()
-        .gap(px(8.0))
-        .child(
-            div()
-                .flex()
-                .flex_row()
-                .items_center()
-                .gap(px(tokens.metrics.settings_theme_preview_dot_gap))
-                .child(settings_appearance_preview_dot(
-                    terminal.red,
-                    tokens.metrics.settings_theme_preview_dot_size,
-                ))
-                .child(settings_appearance_preview_dot(
-                    terminal.yellow,
-                    tokens.metrics.settings_theme_preview_dot_size,
-                ))
-                .child(settings_appearance_preview_dot(
-                    terminal.green,
-                    tokens.metrics.settings_theme_preview_dot_size,
-                ))
-                .child(div().flex_1())
-                .child(
-                    div()
-                        .text_size(px(tokens.metrics.ui_text_xs))
-                        .text_color(rgb(terminal.foreground))
-                        .min_w_0()
-                        .truncate()
-                        .child(name),
-                ),
-        )
         .child(
             div()
                 .font_family(
@@ -370,6 +371,8 @@ pub fn settings_appearance_theme_preview(
                 .text_size(px(tokens.metrics.ui_text_xs))
                 .line_height(px(tokens.metrics.settings_theme_preview_line_height))
                 .text_color(rgb(terminal.foreground))
+                .whitespace_nowrap()
+                .overflow_hidden()
                 .flex()
                 .flex_col()
                 .child(
