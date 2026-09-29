@@ -538,7 +538,11 @@ impl WorkspaceApp {
                                     this.ssh_nodes.get(&node_id).map(|node| node.title.clone())
                             {
                                 let _ = this.queue_ssh_terminal_tab_for_existing_node(
-                                    node_id, None, title, window, cx,
+                                    node_id,
+                                    Vec::new(),
+                                    title,
+                                    window,
+                                    cx,
                                 );
                             }
                         }

@@ -807,10 +807,13 @@ impl WorkspaceApp {
                     })?;
                 // Tauri passes the saved connection's current post-connect command
                 // to createTerminalForNode even when the live node already exists.
-                let post_connect_command = config.post_connect_command.clone();
+                let login_script = oxideterm_connections::terminal_login_script(
+                    config.post_connect_command.as_deref(),
+                    &config.login_script,
+                );
                 self.queue_ssh_terminal_tab_for_node_with_mark_used(
                     node_id,
-                    post_connect_command,
+                    login_script,
                     node_config,
                     title,
                     Some(saved_connection_id.clone()),
@@ -849,10 +852,13 @@ impl WorkspaceApp {
                 node.dedicated_new_terminal_connection = saved_dedicated_new_terminal_connection;
                 node.ssh_channel_strategy = saved_ssh_channel_strategy;
             }
-            let post_connect_command = target_config.post_connect_command.clone();
+            let login_script = oxideterm_connections::terminal_login_script(
+                target_config.post_connect_command.as_deref(),
+                &target_config.login_script,
+            );
             self.queue_ssh_terminal_tab_for_node_with_mark_used(
                 target_node_id,
-                post_connect_command,
+                login_script,
                 target_config,
                 title,
                 Some(saved_connection_id.clone()),
@@ -911,10 +917,13 @@ impl WorkspaceApp {
                         })?;
                     // Tauri reuses the existing direct root node but still
                     // applies the saved connection's current terminal command.
-                    let post_connect_command = config.post_connect_command.clone();
+                    let login_script = oxideterm_connections::terminal_login_script(
+                        config.post_connect_command.as_deref(),
+                        &config.login_script,
+                    );
                     self.queue_ssh_terminal_tab_for_node_with_mark_used(
                         existing_node_id,
-                        post_connect_command,
+                        login_script,
                         node_config,
                         node_title,
                         node_saved_connection_id,
@@ -937,10 +946,13 @@ impl WorkspaceApp {
                 node.ssh_channel_strategy = saved_ssh_channel_strategy;
             }
             let cleanup_node_id = node_id.clone();
-            let post_connect_command = config.post_connect_command.clone();
+            let login_script = oxideterm_connections::terminal_login_script(
+                config.post_connect_command.as_deref(),
+                &config.login_script,
+            );
             let result = self.queue_ssh_terminal_tab_for_node_with_mark_used(
                 node_id,
-                post_connect_command,
+                login_script,
                 config,
                 title,
                 Some(saved_connection_id.clone()),
@@ -1186,7 +1198,7 @@ impl WorkspaceApp {
                 runtime_entity::PendingSshTerminalOpen {
                     replace_session: None,
                     node_id: node_id.clone(),
-                    post_connect_command: None,
+                    login_script: Vec::new(),
                     mark_used_connection_id: None,
                     save_after_open: None,
                     cleanup_node_id: Some(node_id.clone()),
@@ -1370,7 +1382,7 @@ impl WorkspaceApp {
     pub(in crate::workspace) fn create_ssh_terminal_pane_for_existing_node(
         &mut self,
         node_id: &NodeId,
-        post_connect_command: Option<String>,
+        login_script: Vec<oxideterm_connections::LoginScriptStep>,
         allow_dedicated_connection: bool,
         previous_session: Option<TerminalSessionId>,
         window: &mut Window,
@@ -1496,7 +1508,7 @@ impl WorkspaceApp {
         }
         // Opening another terminal never replays a post-connect command unless
         // the caller explicitly supplies one.
-        .with_post_connect_command(post_connect_command)
+        .with_login_script(login_script)
         // Both policies keep remounted tabs on the deferred PTY boundary
         // so authentication cannot briefly start at a fallback size.
         .with_deferred_pty(true)
@@ -1528,14 +1540,14 @@ impl WorkspaceApp {
     pub(in crate::workspace) fn create_ssh_terminal_tab_for_existing_node(
         &mut self,
         node_id: &NodeId,
-        post_connect_command: Option<String>,
+        login_script: Vec<oxideterm_connections::LoginScriptStep>,
         title: String,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Result<TerminalSessionId> {
         self.create_ssh_terminal_tab_for_existing_node_with_policy(
             node_id,
-            post_connect_command,
+            login_script,
             title,
             true,
             window,
@@ -1546,14 +1558,14 @@ impl WorkspaceApp {
     fn create_initial_ssh_terminal_tab_for_existing_node(
         &mut self,
         node_id: &NodeId,
-        post_connect_command: Option<String>,
+        login_script: Vec<oxideterm_connections::LoginScriptStep>,
         title: String,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Result<TerminalSessionId> {
         self.create_ssh_terminal_tab_for_existing_node_with_policy(
             node_id,
-            post_connect_command,
+            login_script,
             title,
             false,
             window,
@@ -1564,7 +1576,7 @@ impl WorkspaceApp {
     fn create_ssh_terminal_tab_for_existing_node_with_policy(
         &mut self,
         node_id: &NodeId,
-        post_connect_command: Option<String>,
+        login_script: Vec<oxideterm_connections::LoginScriptStep>,
         title: String,
         allow_dedicated_connection: bool,
         window: &mut Window,
@@ -1573,7 +1585,7 @@ impl WorkspaceApp {
         let tab_id = self.alloc_tab_id(cx);
         let (pane_id, session_id) = self.create_ssh_terminal_pane_for_existing_node(
             node_id,
-            post_connect_command,
+            login_script,
             allow_dedicated_connection,
             None,
             window,
@@ -1610,7 +1622,7 @@ impl WorkspaceApp {
     pub(in crate::workspace) fn queue_ssh_terminal_tab_for_existing_node(
         &mut self,
         node_id: NodeId,
-        post_connect_command: Option<String>,
+        login_script: Vec<oxideterm_connections::LoginScriptStep>,
         title: String,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -1618,13 +1630,7 @@ impl WorkspaceApp {
         if !self.node_is_ready_for_terminal(&node_id) {
             return Err(anyhow::anyhow!("SSH node {} is not ready", node_id.0));
         }
-        self.create_ssh_terminal_tab_for_existing_node(
-            &node_id,
-            post_connect_command,
-            title,
-            window,
-            cx,
-        )?;
+        self.create_ssh_terminal_tab_for_existing_node(&node_id, login_script, title, window, cx)?;
         Ok(())
     }
 
@@ -1651,7 +1657,7 @@ impl WorkspaceApp {
     pub(in crate::workspace) fn queue_ssh_terminal_tab_for_node_with_mark_used(
         &mut self,
         node_id: NodeId,
-        post_connect_command: Option<String>,
+        login_script: Vec<oxideterm_connections::LoginScriptStep>,
         config: SshConfig,
         title: String,
         saved_connection_id: Option<String>,
@@ -1675,7 +1681,7 @@ impl WorkspaceApp {
         if self.node_is_ready_for_terminal(&node_id) {
             self.create_initial_ssh_terminal_tab_for_existing_node(
                 &node_id,
-                post_connect_command,
+                login_script,
                 title,
                 window,
                 cx,
@@ -1734,7 +1740,7 @@ impl WorkspaceApp {
                 runtime_entity::PendingSshTerminalOpen {
                     replace_session: None,
                     node_id: node_id.clone(),
-                    post_connect_command,
+                    login_script,
                     mark_used_connection_id,
                     save_after_open,
                     cleanup_node_id: None,
@@ -1804,7 +1810,7 @@ impl WorkspaceApp {
             if self
                 .create_initial_ssh_terminal_tab_for_existing_node(
                     &request.node_id,
-                    request.post_connect_command,
+                    request.login_script,
                     request.title,
                     window,
                     cx,

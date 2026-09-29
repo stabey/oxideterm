@@ -28,7 +28,8 @@ struct ConnectionFormModalSnapshot {
     empty_password: bool,
     group: String,
     notes: String,
-    post_connect_command: String,
+    post_connect_command: zeroize::Zeroizing<String>,
+    login_script: Vec<super::super::form_state::LoginScriptStepDraft>,
     proxy_command_enabled: bool,
     proxy_command: zeroize::Zeroizing<String>,
     proxy_command_configured: bool,
@@ -83,7 +84,8 @@ impl ConnectionFormModalSnapshot {
             empty_password: form.empty_password,
             group: form.group.clone(),
             notes: form.notes.clone(),
-            post_connect_command: form.post_connect_command.clone(),
+            post_connect_command: zeroize::Zeroizing::new(form.post_connect_command.clone()),
+            login_script: form.login_script.clone(),
             proxy_command_enabled: form.proxy_command_enabled,
             // Rendering owns one bounded zeroizing copy; persisted forms retain only a keychain id.
             proxy_command: zeroize::Zeroizing::new(form.proxy_command.clone()),
@@ -1092,18 +1094,18 @@ impl WorkspaceApp {
                                         .flex_col()
                                         .gap(px(self.tokens.metrics.modal_section_gap))
                                         .child(self.render_connection_terminal_options(cx))
-                                        .child(self.render_connection_field(
+                                        .child(self.render_connection_multiline_field(
                                             self.i18n.t("ssh.form.post_connect_command"),
                                             &form.post_connect_command,
                                             self.i18n
                                                 .t("ssh.form.post_connect_command_placeholder"),
                                             NewConnectionField::PostConnectCommand,
-                                            false,
                                             cx,
                                         ))
                                         .child(self.render_connection_hint(
                                             self.i18n.t("ssh.form.post_connect_command_hint"),
                                         ))
+                                        .child(self.render_login_script_steps(&form.login_script, cx))
                                         .into_any_element();
                                     content
                                         .child(self.render_connection_form_section(

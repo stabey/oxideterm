@@ -710,7 +710,7 @@ fn build_saved_connection_from_sync_payload(
     for hop in &proxy_chain {
         hop.ssh_algorithms.validate()?;
     }
-    let options = synced_options
+    let mut options = synced_options
         .cloned()
         .unwrap_or_else(|| ConnectionOptions {
             // Older snapshots exposed only these option fields through
@@ -722,6 +722,10 @@ fn build_saved_connection_from_sync_payload(
             ..Default::default()
         });
     options.ssh_algorithms.validate()?;
+    // Metadata snapshots do not carry login responses. Updating metadata keeps the local script.
+    options.login_script = existing
+        .map(|connection| connection.options.login_script.clone())
+        .unwrap_or_default();
 
     Ok(SavedConnection {
         id: payload.id.clone(),
@@ -1216,7 +1220,10 @@ fn build_saved_connection_sync_record(
     let mut payload = ConnectionInfo::from(connection);
     // Protected-store references identify one device and must never enter a portable snapshot.
     payload.upstream_proxy = portable_upstream_proxy(&payload.upstream_proxy);
-    let options = connection.options.clone();
+    let mut options = connection.options.clone();
+    // This snapshot also backs plaintext CLI exports and backups. Only the encrypted
+    // connection store and .oxide archive may persist the script's response text.
+    options.login_script.clear();
     Ok(SavedConnectionSyncRecord {
         id: connection.id.clone(),
         revision: sha256_hex(&(&payload, &options))?,

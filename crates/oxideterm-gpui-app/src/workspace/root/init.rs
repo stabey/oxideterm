@@ -1132,6 +1132,7 @@ impl WorkspaceApp {
         );
         TerminalUiPreferences {
             processing_failed_message: self.i18n.t("terminal.processing_failed"),
+            login_script_failed_message: self.i18n.t("ssh.form.login_script_failed"),
             font_family: terminal
                 .font_family
                 .terminal_family_name(&terminal.custom_font_family),

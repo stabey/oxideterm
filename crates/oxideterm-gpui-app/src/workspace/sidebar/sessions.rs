@@ -22,20 +22,29 @@ fn active_connection_count(rows: &[ActiveSessionSidebarRow]) -> usize {
         .sum()
 }
 
-fn sidebar_terminal_post_connect_command(
+fn sidebar_terminal_login_script(
     saved_connection: Option<&oxideterm_connections::SavedConnection>,
     node_router: &NodeRouter,
     node_id: &NodeId,
-) -> Option<String> {
+) -> Vec<oxideterm_connections::LoginScriptStep> {
     if let Some(connection) = saved_connection {
         // An explicitly cleared saved command must not fall back to an older runtime value.
-        return connection.post_connect_command().map(ToOwned::to_owned);
+        return oxideterm_connections::terminal_login_script(
+            connection.post_connect_command(),
+            &connection.options.login_script,
+        );
     }
     // Temporary nodes have no saved profile. Read their zeroizing config only
     // for the explicit open action and move the command into the terminal request.
     node_router
         .node_runtime_snapshot(node_id)
-        .and_then(|mut snapshot| snapshot.config.post_connect_command.take())
+        .map(|snapshot| {
+            oxideterm_connections::terminal_login_script(
+                snapshot.config.post_connect_command.as_deref(),
+                &snapshot.config.login_script,
+            )
+        })
+        .unwrap_or_default()
 }
 
 impl standalone_connections::StandaloneConnectionKind {
@@ -514,7 +523,7 @@ impl WorkspaceApp {
             .ssh_nodes
             .get(&node_id)
             .and_then(|node| node.saved_connection_id.clone());
-        let post_connect_command = sidebar_terminal_post_connect_command(
+        let login_script = sidebar_terminal_login_script(
             saved_connection_id
                 .as_deref()
                 .and_then(|id| self.connection_store.get(id)),
@@ -524,7 +533,7 @@ impl WorkspaceApp {
         if self.node_is_ready_for_terminal(&node_id) {
             return self.queue_ssh_terminal_tab_for_existing_node(
                 node_id,
-                post_connect_command,
+                login_script,
                 title,
                 window,
                 cx,
@@ -540,7 +549,7 @@ impl WorkspaceApp {
         // A disconnected node copies it only at the explicit connect action.
         self.queue_ssh_terminal_tab_for_node_with_mark_used(
             node_id,
-            post_connect_command,
+            login_script,
             config,
             title,
             saved_connection_id,
@@ -3041,16 +3050,26 @@ mod terminal_open_tests {
                 "created_at": "2026-01-01T00:00:00Z"
             }))
             .unwrap();
-        for command in [Some("cd /srv/updated"), None] {
+        for (command, expected) in [
+            (
+                Some("cd /srv/updated"),
+                vec![oxideterm_connections::LoginScriptStep::command(
+                    "cd /srv/updated",
+                )],
+            ),
+            (None, Vec::new()),
+        ] {
             saved.post_connect_command = command.map(str::to_owned);
             assert_eq!(
-                sidebar_terminal_post_connect_command(Some(&saved), &router, &node_id).as_deref(),
-                command,
+                sidebar_terminal_login_script(Some(&saved), &router, &node_id),
+                expected,
             );
         }
         assert_eq!(
-            sidebar_terminal_post_connect_command(None, &router, &node_id).as_deref(),
-            Some("cd /srv/original"),
+            sidebar_terminal_login_script(None, &router, &node_id),
+            vec![oxideterm_connections::LoginScriptStep::command(
+                "cd /srv/original"
+            )],
         );
     }
 }

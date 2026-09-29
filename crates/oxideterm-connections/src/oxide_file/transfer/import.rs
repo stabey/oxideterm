@@ -1258,6 +1258,9 @@ fn merge_options(
         // An imported enabled policy is explicit; absent legacy fields remain disabled.
         existing.x11_forwarding = imported.x11_forwarding;
     }
+    if !imported.login_script.is_empty() {
+        existing.login_script = imported.login_script;
+    }
     existing.post_connect_command = imported
         .post_connect_command
         .or(existing.post_connect_command);

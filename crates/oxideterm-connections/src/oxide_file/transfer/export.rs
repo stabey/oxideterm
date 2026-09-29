@@ -380,6 +380,11 @@ fn export_connection(
     forwards: Vec<EncryptedForward>,
 ) -> Result<EncryptedConnection, OxideFileError> {
     let proxy_chain = export_proxy_chain(store, conn, options)?;
+    let mut connection_options = conn.options.clone();
+    if !options.include_passwords {
+        // Login responses may be passwords even when their field is labelled as a command.
+        connection_options.login_script.clear();
+    }
     Ok(EncryptedConnection {
         source_connection_id: Some(conn.id.clone()),
         name: conn.name.clone(),
@@ -393,7 +398,7 @@ fn export_connection(
         icon_background_color: conn.icon_background_color.clone(),
         icon: conn.icon.clone(),
         tags: conn.tags.clone(),
-        options: conn.options.clone(),
+        options: connection_options,
         upstream_proxy: export_upstream_proxy_policy(&conn.upstream_proxy),
         proxy_chain,
         forwards,

@@ -23,11 +23,10 @@ pub struct SshSessionConfig {
     trzsz_policy: Option<TrzszTransferPolicy>,
     runtime: Option<Arc<tokio::runtime::Runtime>>,
     defer_pty_until_resize: bool,
-    post_connect_command: Option<String>,
+    post_connect_command: Option<zeroize::Zeroizing<String>>,
+    login_script: Vec<oxideterm_ssh::LoginScriptStep>,
     screen_history: Option<alacritty_terminal::term::ScreenHistory>,
 }
-
-const POST_CONNECT_COMMAND_MAX_BYTES: usize = 8192;
 
 impl SshSessionConfig {
     pub(super) fn audit_context(&self) -> Option<oxideterm_audit::AuditContext> {
@@ -81,6 +80,7 @@ impl SshSessionConfig {
             runtime: None,
             defer_pty_until_resize: false,
             post_connect_command: None,
+            login_script: Vec::new(),
             screen_history: None,
         }
     }
@@ -110,6 +110,7 @@ impl SshSessionConfig {
             runtime: None,
             defer_pty_until_resize: false,
             post_connect_command: None,
+            login_script: Vec::new(),
             screen_history: None,
         }
     }
@@ -186,10 +187,27 @@ impl SshSessionConfig {
 
     pub fn with_post_connect_command(mut self, command: Option<String>) -> Self {
         self.post_connect_command = command.and_then(|command| {
+            let command = zeroize::Zeroizing::new(command);
             let command = command.trim().to_string();
-            (!command.is_empty()).then_some(command)
+            (!command.is_empty()).then(|| zeroize::Zeroizing::new(command))
         });
         self
+    }
+
+    pub fn with_login_script(mut self, steps: Vec<oxideterm_ssh::LoginScriptStep>) -> Self {
+        self.login_script = steps;
+        self
+    }
+
+    fn take_login_script(&mut self) -> Vec<oxideterm_ssh::LoginScriptStep> {
+        let mut steps = Vec::new();
+        if let Some(command) = self.post_connect_command.take() {
+            if !command.trim().is_empty() {
+                steps.push(oxideterm_ssh::LoginScriptStep::command(command.trim()));
+            }
+        }
+        steps.append(&mut self.login_script);
+        steps
     }
 
     pub fn defer_pty_until_resize(&self) -> bool {
@@ -201,17 +219,19 @@ impl SshSessionConfig {
     }
 
     pub fn post_connect_command(&self) -> Option<&str> {
-        self.post_connect_command.as_deref()
-    }
-
-    pub fn post_connect_input(&self) -> Result<Option<Vec<u8>>, String> {
-        normalize_post_connect_command(self.post_connect_command.as_deref())
+        self.post_connect_command
+            .as_ref()
+            .map(|command| command.as_str())
     }
 }
 
 impl From<oxideterm_ssh::SshConfig> for SshSessionConfig {
     fn from(mut config: oxideterm_ssh::SshConfig) -> Self {
-        let post_connect_command = config.post_connect_command.take();
+        let post_connect_command = config
+            .post_connect_command
+            .take()
+            .map(zeroize::Zeroizing::new);
+        let login_script = std::mem::take(&mut config.login_script);
         Self {
             host: config.host.clone(),
             port: config.port,
@@ -225,50 +245,16 @@ impl From<oxideterm_ssh::SshConfig> for SshSessionConfig {
             runtime: None,
             defer_pty_until_resize: false,
             post_connect_command,
+            login_script,
             screen_history: None,
         }
     }
 }
 
-fn normalize_post_connect_command(command: Option<&str>) -> Result<Option<Vec<u8>>, String> {
-    let Some(command) = command.map(str::trim).filter(|value| !value.is_empty()) else {
-        return Ok(None);
-    };
-
-    // Tauri sends each logical line as an Enter key. Normalize all newline
-    // variants to carriage returns before the SSH PTY receives the payload.
-    let mut normalized = command.replace("\r\n", "\n").replace('\r', "\n");
-    normalized = normalized.replace('\n', "\r");
-    if !normalized.ends_with('\r') {
-        normalized.push('\r');
-    }
-
-    let bytes = normalized.into_bytes();
-    if bytes.len() > POST_CONNECT_COMMAND_MAX_BYTES {
-        return Err(format!(
-            "Post-connect command is too long (max {} bytes)",
-            POST_CONNECT_COMMAND_MAX_BYTES
-        ));
-    }
-    Ok(Some(bytes))
-}
-
 #[cfg(test)]
 mod ssh_config_tests {
-    use super::{SshSessionConfig, normalize_post_connect_command};
+    use super::SshSessionConfig;
     use oxideterm_ssh::{SshConfig, X11ForwardPolicy};
-
-    #[test]
-    fn post_connect_command_normalization_handles_content_and_empty_values() {
-        for (input, expected) in [
-            (Some("  cd /srv/app  "), Some(b"cd /srv/app\r".to_vec())),
-            (Some("cd /srv/app\nls"), Some(b"cd /srv/app\rls\r".to_vec())),
-            (Some("   "), None),
-            (None, None),
-        ] {
-            assert_eq!(normalize_post_connect_command(input).unwrap(), expected);
-        }
-    }
 
     #[test]
     fn post_connect_override_can_clear_saved_node_command() {

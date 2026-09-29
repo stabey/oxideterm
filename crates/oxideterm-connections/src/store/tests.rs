@@ -41,9 +41,76 @@ mod tests {
             x11_forwarding: ConnectionX11ForwardingOptions::default(),
             dedicated_new_terminal_connection: false,
             ssh_channel_strategy: SshChannelStrategy::default(),
+            login_script: Vec::new(),
             post_connect_command: None,
             terminal: ConnectionTerminalOptions::default(),
         }
+    }
+
+    #[test]
+    fn login_script_save_encrypts_responses_and_preserves_order_on_reload() {
+        let _key = with_config_encryption_key_for_tests([47; CONFIG_ENCRYPTION_KEY_LEN]);
+        let mut store = load_empty_store("login-script");
+        let mut entry = request("login", SavedAuth::Agent);
+        entry.login_script = vec![
+            crate::LoginScriptStep {
+                expect: "Password: ".into(),
+                send: "test-private-response".into(),
+                is_regex: false,
+                optional: true,
+            },
+            crate::LoginScriptStep::command("if true; then\n  pwd\nfi"),
+        ];
+        store.upsert(entry).unwrap();
+        let contents = fs::read_to_string(store.path()).unwrap();
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&contents).unwrap()["format"],
+            ENCRYPTED_CONFIG_FORMAT
+        );
+        assert!(!contents.contains("test-private-response"));
+        let restored = ConnectionStore::load_read_only(store.path()).unwrap();
+        let steps = &restored.get("login").unwrap().options.login_script;
+        assert_eq!(
+            steps,
+            &vec![
+                crate::LoginScriptStep {
+                    expect: "Password: ".into(),
+                    send: "test-private-response".into(),
+                    is_regex: false,
+                    optional: true,
+                },
+                crate::LoginScriptStep::command("if true; then\n  pwd\nfi"),
+            ]
+        );
+        assert!(!format!("{steps:?}").contains("test-private-response"));
+        let mut snapshot = store.export_saved_connections_snapshot().unwrap();
+        assert!(
+            !serde_json::to_string(&snapshot)
+                .unwrap()
+                .contains("test-private-response")
+        );
+        snapshot.records[0].payload.as_mut().unwrap().name = "Renamed through metadata".into();
+        snapshot.records[0].revision = "metadata-update".into();
+        snapshot.records[0].updated_at = (Utc::now() + Duration::seconds(1)).to_rfc3339();
+        store
+            .apply_saved_connections_snapshot(snapshot, SavedConnectionsConflictStrategy::Replace)
+            .unwrap();
+        assert_eq!(store.get("login").unwrap().name, "Renamed through metadata");
+        assert_eq!(
+            store.get("login").unwrap().options.login_script[0]
+                .send
+                .expose_secret(),
+            "test-private-response"
+        );
+        let mut replacement = request("login", SavedAuth::Agent);
+        replacement.login_script = vec![crate::LoginScriptStep::command("cd /srv/new")];
+        store.upsert(replacement).unwrap();
+        let restored = ConnectionStore::load_read_only(store.path()).unwrap();
+        assert_eq!(
+            restored.get("login").unwrap().options.login_script,
+            vec![crate::LoginScriptStep::command("cd /srv/new")]
+        );
+        let _ = fs::remove_file(store.path());
     }
 
     #[test]
@@ -2420,6 +2487,7 @@ mod tests {
             },
             dedicated_new_terminal_connection: true,
             ssh_channel_strategy: SshChannelStrategy::DedicatedPerConsumer,
+            login_script: Vec::new(),
             post_connect_command: Some("uname -a".to_string()),
             terminal: ConnectionTerminalOptions::default(),
         };

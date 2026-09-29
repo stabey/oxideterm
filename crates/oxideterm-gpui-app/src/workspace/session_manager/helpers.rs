@@ -384,6 +384,13 @@ pub(in crate::workspace) fn form_from_saved_connection(
     form.icon = conn.icon.clone().unwrap_or_default();
     form.tags = conn.tags.clone();
     form.post_connect_command = conn.post_connect_command().unwrap_or_default().to_string();
+    form.login_script = conn
+        .options
+        .login_script
+        .iter()
+        .cloned()
+        .map(Into::into)
+        .collect();
     form.proxy_command_enabled = conn.proxy_command.is_some();
     form.proxy_command_keychain_id = conn
         .proxy_command
@@ -837,6 +844,7 @@ fn connection_draft_from_form_with_proxy_hop_prefix(
         ssh_channel_strategy: form.ssh_channel_strategy,
         x11_forwarding: form.x11_forwarding,
         post_connect_command: form.post_connect_command.clone(),
+        login_script: super::super::new_connection::login_script_from_form(form),
         terminal: form.terminal.clone(),
     }
 }

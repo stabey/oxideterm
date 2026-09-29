@@ -3499,6 +3499,14 @@ impl TerminalPane {
                 );
                 TerminalEventEffect::notify()
             }
+            TerminalEvent::LoginScriptFailed => {
+                self.emit_trzsz_notice(
+                    self.preferences.login_script_failed_message.clone(),
+                    None,
+                    TerminalNoticeVariant::Error,
+                );
+                TerminalEventEffect::notify()
+            }
             TerminalEvent::StartupFailed => {
                 self.command_fact_ledger.interrupt_audit_commands();
                 self.cancel_pending_tmux_mouse();

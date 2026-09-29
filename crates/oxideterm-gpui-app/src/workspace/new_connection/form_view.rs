@@ -75,6 +75,7 @@ use oxideterm_settings_model::{settings_multiline_line_ranges, settings_multilin
 mod field_controls;
 mod form_modal;
 mod ftp;
+mod login_script;
 mod proxy_chain_view;
 mod ssh_algorithm_editor;
 mod standalone_sftp_modal;
@@ -231,6 +232,9 @@ impl WorkspaceApp {
                     | NewConnectionField::Username
                     | NewConnectionField::Group
                     | NewConnectionField::Notes
+                    | NewConnectionField::PostConnectCommand
+                    | NewConnectionField::LoginScriptExpect(_)
+                    | NewConnectionField::LoginScriptSend(_)
                     | NewConnectionField::InitialRemotePath
                     | NewConnectionField::StandaloneSftpSecondaryHost
                     | NewConnectionField::StandaloneSftpSecondaryUsername
@@ -294,6 +298,7 @@ impl WorkspaceApp {
                 }
                 "enter" => (ConnectionFormKeyResult::Submit, false),
                 "tab" => {
+                    let previous_field = form.focused_field;
                     form.focused_field = if let Some(jump_form) = form.jump_server_form.as_ref() {
                         next_jump_connection_field(
                             form.focused_field,
@@ -316,6 +321,36 @@ impl WorkspaceApp {
                             !modifiers.shift,
                         )
                     };
+                    if !form.login_script.is_empty() {
+                        form.focused_field = match (previous_field, modifiers.shift) {
+                            (NewConnectionField::PostConnectCommand, false) => {
+                                NewConnectionField::LoginScriptExpect(0)
+                            }
+                            (NewConnectionField::LoginScriptExpect(index), false) => {
+                                NewConnectionField::LoginScriptSend(index)
+                            }
+                            (NewConnectionField::LoginScriptSend(index), true) => {
+                                NewConnectionField::LoginScriptExpect(index)
+                            }
+                            (NewConnectionField::LoginScriptExpect(0), true) => {
+                                NewConnectionField::PostConnectCommand
+                            }
+                            (NewConnectionField::LoginScriptExpect(index), true) => {
+                                NewConnectionField::LoginScriptSend(index - 1)
+                            }
+                            (NewConnectionField::LoginScriptSend(index), false)
+                                if index + 1 < form.login_script.len() =>
+                            {
+                                NewConnectionField::LoginScriptExpect(index + 1)
+                            }
+                            (_, true)
+                                if form.focused_field == NewConnectionField::PostConnectCommand =>
+                            {
+                                NewConnectionField::LoginScriptSend(form.login_script.len() - 1)
+                            }
+                            _ => form.focused_field,
+                        };
+                    }
                     form.field_focused = true;
                     clear_connection_selection(form);
                     cx.notify();
@@ -395,10 +430,15 @@ impl WorkspaceApp {
             let Some(form) = state.form.as_mut() else {
                 return false;
             };
-            if form.focused_field == NewConnectionField::Notes {
+            if matches!(
+                form.focused_field,
+                NewConnectionField::Notes
+                    | NewConnectionField::PostConnectCommand
+                    | NewConnectionField::LoginScriptSend(_)
+            ) {
                 insert_text_into_current_connection_field(form, &normalized);
             } else {
-                // All other connection form controls remain single-line inputs.
+                // Single-line controls normalize pasted separators to spaces.
                 let single_line = normalized.lines().collect::<Vec<_>>().join(" ");
                 if saved_connection_form_uses_unloaded_secret
                     && form.focused_field == NewConnectionField::Password

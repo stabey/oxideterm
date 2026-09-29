@@ -221,6 +221,12 @@ pub(super) fn form_from_runtime_config(
     form.gssapi_delegate_credentials = auth_fields.gssapi_delegate_credentials;
     form.group = default_group;
     form.post_connect_command = config.post_connect_command.clone().unwrap_or_default();
+    form.login_script = config
+        .login_script
+        .iter()
+        .cloned()
+        .map(Into::into)
+        .collect();
     form.agent_forwarding = config.agent_forwarding;
     form.identity_agent = config.identity_agent.clone().unwrap_or_default();
     form.agent_forwarding_socket = config.agent_forwarding_socket.clone();

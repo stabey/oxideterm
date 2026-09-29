@@ -1102,6 +1102,7 @@ mod tests {
                 dedicated_new_terminal_connection: false,
                 ssh_channel_strategy: oxideterm_connections::SshChannelStrategy::default(),
                 x11_forwarding: Default::default(),
+                login_script: Vec::new(),
                 post_connect_command: None,
                 terminal: Default::default(),
             })

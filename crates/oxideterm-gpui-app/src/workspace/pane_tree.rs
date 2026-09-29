@@ -638,9 +638,14 @@ impl WorkspaceApp {
         cx: &mut Context<Self>,
     ) {
         let group_id = self.alloc_pane_id(cx);
-        let Ok((pane_id, session_id)) =
-            self.create_ssh_terminal_pane_for_existing_node(&node_id, None, true, None, window, cx)
-        else {
+        let Ok((pane_id, session_id)) = self.create_ssh_terminal_pane_for_existing_node(
+            &node_id,
+            Vec::new(),
+            true,
+            None,
+            window,
+            cx,
+        ) else {
             return;
         };
         let mounted = self.tab_host.update(cx, |tab_host, _| {

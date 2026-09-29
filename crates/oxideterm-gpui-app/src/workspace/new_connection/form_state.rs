@@ -237,6 +237,8 @@ pub(in crate::workspace) enum NewConnectionField {
     StandaloneSftpSecondaryUpstreamProxyUsername,
     StandaloneSftpSecondaryUpstreamProxyPassword,
     PostConnectCommand,
+    LoginScriptExpect(usize),
+    LoginScriptSend(usize),
     ProxyCommand,
     Color,
     IconBackgroundColor,
@@ -263,6 +265,118 @@ pub(in crate::workspace) enum NewConnectionField {
     MoshUdpHost,
     MoshUdpPort,
     MoshLocale,
+}
+
+impl NewConnectionField {
+    pub(in crate::workspace) fn anchor_key(self) -> u64 {
+        match self {
+            Self::Name => 0,
+            Self::LocalCwd => 1,
+            Self::Host => 2,
+            Self::Port => 3,
+            Self::Username => 4,
+            Self::Password => 5,
+            Self::KeyPath => 6,
+            Self::ManagedKeyId => 7,
+            Self::CertPath => 8,
+            Self::Passphrase => 9,
+            Self::GssapiServerIdentity => 10,
+            Self::IdentityAgent => 11,
+            Self::Group => 12,
+            Self::Notes => 13,
+            Self::InitialRemotePath => 14,
+            Self::ConnectTimeoutSeconds => 15,
+            Self::StandaloneSftpSecondaryHost => 16,
+            Self::StandaloneSftpSecondaryPort => 17,
+            Self::StandaloneSftpSecondaryUsername => 18,
+            Self::StandaloneSftpSecondaryPassword => 19,
+            Self::StandaloneSftpSecondaryKeyPath => 20,
+            Self::StandaloneSftpSecondaryManagedKeyId => 21,
+            Self::StandaloneSftpSecondaryCertPath => 22,
+            Self::StandaloneSftpSecondaryPassphrase => 23,
+            Self::StandaloneSftpSecondaryGssapiServerIdentity => 24,
+            Self::StandaloneSftpSecondaryIdentityAgent => 25,
+            Self::StandaloneSftpSecondaryInitialRemotePath => 26,
+            Self::StandaloneSftpSecondaryConnectTimeoutSeconds => 27,
+            Self::StandaloneSftpSecondaryProxyCommand => 28,
+            Self::StandaloneSftpSecondaryUpstreamProxyHost => 29,
+            Self::StandaloneSftpSecondaryUpstreamProxyPort => 30,
+            Self::StandaloneSftpSecondaryUpstreamProxyNoProxy => 31,
+            Self::StandaloneSftpSecondaryUpstreamProxyUsername => 32,
+            Self::StandaloneSftpSecondaryUpstreamProxyPassword => 33,
+            Self::PostConnectCommand => 34,
+            Self::ProxyCommand => 35,
+            Self::Color => 36,
+            Self::IconBackgroundColor => 37,
+            Self::JumpHost => 38,
+            Self::JumpPort => 39,
+            Self::JumpUsername => 40,
+            Self::JumpPassword => 41,
+            Self::JumpKeyPath => 42,
+            Self::JumpManagedKeyId => 43,
+            Self::JumpCertPath => 44,
+            Self::JumpPassphrase => 45,
+            Self::JumpGssapiServerIdentity => 46,
+            Self::JumpIdentityAgent => 47,
+            Self::UpstreamProxyHost => 48,
+            Self::UpstreamProxyPort => 49,
+            Self::UpstreamProxyNoProxy => 50,
+            Self::UpstreamProxyUsername => 51,
+            Self::UpstreamProxyPassword => 52,
+            Self::SerialPortPath => 53,
+            Self::SerialBaudRate => 54,
+            Self::SerialProfileName => 55,
+            Self::TelnetProfileName => 56,
+            Self::MoshServerExecutable => 57,
+            Self::MoshUdpHost => 58,
+            Self::MoshUdpPort => 59,
+            Self::MoshLocale => 60,
+            Self::LoginScriptExpect(index) => 256 + index as u64 * 2,
+            Self::LoginScriptSend(index) => 257 + index as u64 * 2,
+        }
+    }
+}
+
+#[derive(Clone, Default)]
+pub(in crate::workspace) struct LoginScriptStepDraft {
+    pub expect: zeroize::Zeroizing<String>,
+    pub send: zeroize::Zeroizing<String>,
+    pub is_regex: bool,
+    pub optional: bool,
+}
+
+impl fmt::Debug for LoginScriptStepDraft {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LoginScriptStepDraft")
+            .field("is_regex", &self.is_regex)
+            .field("optional", &self.optional)
+            .finish_non_exhaustive()
+    }
+}
+
+impl From<oxideterm_connections::LoginScriptStep> for LoginScriptStepDraft {
+    fn from(step: oxideterm_connections::LoginScriptStep) -> Self {
+        Self {
+            expect: step.expect.into_zeroizing(),
+            send: step.send.into_zeroizing(),
+            is_regex: step.is_regex,
+            optional: step.optional,
+        }
+    }
+}
+
+pub(in crate::workspace) fn login_script_from_form(
+    form: &NewConnectionForm,
+) -> Vec<oxideterm_connections::LoginScriptStep> {
+    form.login_script
+        .iter()
+        .map(|step| oxideterm_connections::LoginScriptStep {
+            expect: step.expect.clone().into(),
+            send: step.send.clone().into(),
+            is_regex: step.is_regex,
+            optional: step.optional,
+        })
+        .collect()
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -826,6 +940,7 @@ pub(in crate::workspace) struct NewConnectionForm {
     pub(in crate::workspace) notes: String,
     pub(in crate::workspace) sftp_initial_remote_path: String,
     pub(in crate::workspace) post_connect_command: String,
+    pub(in crate::workspace) login_script: Vec<LoginScriptStepDraft>,
     pub(in crate::workspace) proxy_command_enabled: bool,
     pub(in crate::workspace) proxy_command: String,
     pub(in crate::workspace) proxy_command_keychain_id: Option<String>,
@@ -965,7 +1080,7 @@ impl fmt::Debug for NewConnectionForm {
             // Notes are user-authored free text and may contain sensitive context.
             .field("notes_present", &!self.notes.is_empty())
             .field("sftp_initial_remote_path", &self.sftp_initial_remote_path)
-            .field("post_connect_command", &self.post_connect_command)
+            .field("post_connect_command", &"[redacted]")
             .field("proxy_command_enabled", &self.proxy_command_enabled)
             .field("proxy_command", &"[redacted secret]")
             .field("proxy_command_keychain_id", &self.proxy_command_keychain_id)
@@ -1132,6 +1247,7 @@ impl Default for NewConnectionForm {
             notes: String::new(),
             sftp_initial_remote_path: String::new(),
             post_connect_command: String::new(),
+            login_script: Vec::new(),
             proxy_command_enabled: false,
             proxy_command: String::new(),
             proxy_command_keychain_id: None,
@@ -1238,6 +1354,8 @@ impl NewConnectionForm {
         self.passphrase.zeroize();
         self.upstream_proxy_password.zeroize();
         self.proxy_command.zeroize();
+        self.post_connect_command.zeroize();
+        self.login_script.clear();
     }
 }
 
@@ -2101,6 +2219,8 @@ pub(in crate::workspace) fn current_connection_field_mut(
             &mut form.standalone_sftp_secondary.upstream_proxy_password
         }
         NewConnectionField::PostConnectCommand => &mut form.post_connect_command,
+        NewConnectionField::LoginScriptExpect(index) => &mut form.login_script[index].expect,
+        NewConnectionField::LoginScriptSend(index) => &mut form.login_script[index].send,
         NewConnectionField::ProxyCommand => &mut form.proxy_command,
         NewConnectionField::UpstreamProxyHost => &mut form.upstream_proxy_host,
         NewConnectionField::UpstreamProxyPort => &mut form.upstream_proxy_port,
@@ -2259,6 +2379,8 @@ pub(in crate::workspace) fn current_connection_field(form: &NewConnectionForm) -
             &form.standalone_sftp_secondary.upstream_proxy_password
         }
         NewConnectionField::PostConnectCommand => &form.post_connect_command,
+        NewConnectionField::LoginScriptExpect(index) => &form.login_script[index].expect,
+        NewConnectionField::LoginScriptSend(index) => &form.login_script[index].send,
         NewConnectionField::ProxyCommand => &form.proxy_command,
         NewConnectionField::UpstreamProxyHost => &form.upstream_proxy_host,
         NewConnectionField::UpstreamProxyPort => &form.upstream_proxy_port,

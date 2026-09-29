@@ -208,6 +208,7 @@ impl ConnectionStore {
         &mut self,
         request: SaveConnectionRequest,
     ) -> Result<(ConnectionInfo, SavedConnectionRuntimeSecrets)> {
+        crate::validate_login_script(&request.login_script)?;
         let audit = oxideterm_audit::AuditOperation::begin(
             oxideterm_audit::AuditCategory::Configuration,
             "configuration_save",
@@ -294,6 +295,7 @@ impl ConnectionStore {
             // Tauri stores this command under options; the top-level field remains
             // readable for old native plaintext stores but is no longer emitted.
             options.post_connect_command = post_connect_command;
+            options.login_script = request.login_script;
             let connection = SavedConnection {
                 id: id.clone(),
                 version: existing

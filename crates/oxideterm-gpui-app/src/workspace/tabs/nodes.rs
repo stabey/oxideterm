@@ -962,7 +962,7 @@ impl WorkspaceApp {
                 runtime_entity::PendingSshTerminalOpen {
                     replace_session: Some(session_id),
                     node_id: node_id.clone(),
-                    post_connect_command: None,
+                    login_script: Vec::new(),
                     mark_used_connection_id: None,
                     save_after_open: None,
                     cleanup_node_id: None,
@@ -996,7 +996,7 @@ impl WorkspaceApp {
             .ok_or_else(|| anyhow::anyhow!("Terminal is no longer open"))?;
         let (new_pane_id, new_session_id) = self.create_ssh_terminal_pane_for_existing_node(
             node_id,
-            None,
+            Vec::new(),
             allow_dedicated_connection,
             Some(old_session_id),
             window,

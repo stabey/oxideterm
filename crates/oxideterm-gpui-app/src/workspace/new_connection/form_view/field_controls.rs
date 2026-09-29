@@ -1782,7 +1782,7 @@ impl WorkspaceApp {
         let target = WorkspaceImeTarget::NewConnection(field);
         self.text_input_with_workspace_ime(
             target,
-            input.id(("connection-field", field as u32)),
+            input.id(("connection-field", field.anchor_key() as usize)),
             move |this, cx| {
                 this.update_connection_form_state(cx, |state| {
                     if let Some(form) = state.form.as_mut() {

@@ -573,6 +573,7 @@ fn write_connection_secret(
             ssh_channel_strategy: connection.options.ssh_channel_strategy,
             x11_forwarding: connection.options.x11_forwarding,
             post_connect_command,
+            login_script: connection.options.login_script,
             terminal: connection.options.terminal,
         })
         .map_err(|error| runtime_error(error, json))?;

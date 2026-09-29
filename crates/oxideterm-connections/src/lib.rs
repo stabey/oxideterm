@@ -2,6 +2,7 @@ mod connection_import;
 mod connection_transport;
 mod draft;
 mod keychain;
+mod login_script;
 pub mod oxide_file;
 mod secret;
 mod ssh_config;
@@ -27,6 +28,10 @@ pub use draft::{
     SSH_CONFIG_TAG, SSH_PROXY_COMMAND_TAG, SSH_REMOTE_COMMAND_TAG,
     first_available_default_key_path, save_request_from_draft, saved_auth_from_draft,
     saved_connection_from_ssh_host,
+};
+pub use login_script::{
+    LoginScriptError, LoginScriptStep, MAX_LOGIN_SCRIPT_STEPS, MAX_LOGIN_SCRIPT_TEXT_BYTES,
+    terminal_login_script, validate_login_script,
 };
 pub use secret::SecretString;
 pub use ssh_config::{

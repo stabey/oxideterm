@@ -302,6 +302,7 @@ impl SshPtyCore {
                 true
             }
             Err(error) => {
+                self.cancel_login_script();
                 self.lifecycle = TerminalLifecycle::Exited(None);
                 self.parser_state.transport_running = false;
                 self.parser_state.tmux_display.reset();
@@ -329,16 +330,15 @@ impl SshPtyCore {
         }
 
         self.post_connect_input_sent = true;
-        match self.config.post_connect_input() {
-            Ok(Some(payload)) => {
-                let _ = self.send_command(SshTransportCommand::Data(payload));
-            }
-            Ok(None) => {}
-            Err(error) => {
-                self.parser_state
-                    .feed_utf8_terminal_output(format!("\r\n{error}\r\n").as_bytes());
-            }
-        }
+        let steps = self.config.take_login_script();
+        self.parser_state.start_login_script(steps);
+    }
+
+    fn cancel_login_script(&mut self) {
+        self.post_connect_input_sent = true;
+        self.config.post_connect_command = None;
+        self.config.login_script.clear();
+        self.parser_state.login_script = None;
     }
 
     fn drain_transport_output(&mut self) -> TerminalDrainReport {
@@ -413,6 +413,7 @@ impl SshPtyCore {
                     self.output_queue.push_back(PendingSshOutput::new(bytes));
                 }
                 Err(TryRecvError::Disconnected) => {
+                    self.cancel_login_script();
                     if self.lifecycle.is_running() {
                         if self.parser_state.flush_buffered_modem_output(false) {
                             report.mark_changed();
@@ -558,6 +559,7 @@ impl TerminalSessionBackend for SshPtyCore {
     }
 
     fn write_input(&mut self, bytes: &[u8]) -> Result<()> {
+        self.cancel_login_script();
         self.parser_state.write_input(bytes)
     }
 
@@ -566,10 +568,12 @@ impl TerminalSessionBackend for SshPtyCore {
     }
 
     fn write_text(&mut self, text: &str) -> Result<()> {
+        self.cancel_login_script();
         self.parser_state.write_text(text)
     }
 
     fn paste_text(&mut self, text: &str) -> Result<()> {
+        self.cancel_login_script();
         self.parser_state.paste_text(text)
     }
 
@@ -886,6 +890,7 @@ impl TerminalSessionBackend for SshPtyCore {
         if matches!(self.lifecycle, TerminalLifecycle::Closed) {
             return;
         }
+        self.cancel_login_script();
         self.parser_state.interrupt_recording();
         let _ = self.send_command(SshTransportCommand::Close);
         self.parser_state.command_tx = None;

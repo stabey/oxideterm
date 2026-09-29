@@ -75,6 +75,7 @@ pub fn ssh_config_from_saved_connection_with_auth(
         .flatten(),
         strict_host_key_checking: true,
         post_connect_command: conn.post_connect_command().map(ToOwned::to_owned),
+        login_script: conn.options.login_script.clone(),
         ..SshConfig::default()
     })
 }
@@ -174,6 +175,7 @@ pub fn ssh_config_from_saved_connection_with_runtime_secrets(
         .flatten(),
         strict_host_key_checking: true,
         post_connect_command: conn.post_connect_command().map(ToOwned::to_owned),
+        login_script: conn.options.login_script.clone(),
         ..SshConfig::default()
     })
 }

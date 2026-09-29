@@ -8587,6 +8587,7 @@ dependencies = [
  "oxideterm-trzsz",
  "polling",
  "rand 0.10.2",
+ "regex",
  "russh",
  "serde",
  "serialport",
@@ -8594,6 +8595,7 @@ dependencies = [
  "tokio",
  "tracing",
  "unicode-segmentation",
+ "vte",
  "windows 0.61.3",
  "zeroize",
 ]
