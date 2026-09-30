@@ -940,6 +940,7 @@ impl PrivateMode {
             2004 => Self::Named(NamedPrivateMode::BracketedPaste),
             2026 => Self::Named(NamedPrivateMode::SyncUpdate),
             2031 => Self::Named(NamedPrivateMode::ReportColorScheme),
+            9001 => Self::Named(NamedPrivateMode::Win32Input),
             _ => Self::Unknown(mode),
         }
     }
@@ -993,6 +994,8 @@ pub enum NamedPrivateMode {
     SyncUpdate = 2026,
     /// Notify applications when the host terminal palette changes.
     ReportColorScheme = 2031,
+    /// Preserve Windows key identity across the pseudoconsole byte stream.
+    Win32Input = 9001,
 }
 
 /// Mode for clearing line.
