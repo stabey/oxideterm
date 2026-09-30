@@ -247,11 +247,21 @@ pub(in crate::workspace) enum SshConnectionWorkerResult {
         request: KeyboardInteractivePromptRequest,
         response_tx: oneshot::Sender<Result<KeyboardInteractiveResponses, SshPromptError>>,
     },
+    PasswordPrompt {
+        node_id: Option<NodeId>,
+        prompt: oxideterm_ssh::SshPasswordPrompt,
+        response_tx: oneshot::Sender<Result<oxideterm_ssh::SshPasswordResponse, SshPromptError>>,
+    },
+    PasswordAuthenticated {
+        target: super::password_prompt::SavedPasswordTarget,
+        password: zeroize::Zeroizing<String>,
+    },
 }
 
 #[derive(Clone)]
 pub(in crate::workspace) struct NativeSshPromptHandler {
     tx: ActiveDeliverySender<SshConnectionWorkerResult>,
+    node_id: Option<NodeId>,
 }
 
 fn sync_saved_connection_node_title_for_nodes(
@@ -277,11 +287,43 @@ fn sync_saved_connection_node_title_for_nodes(
 
 impl NativeSshPromptHandler {
     pub(in crate::workspace) fn new(tx: ActiveDeliverySender<SshConnectionWorkerResult>) -> Self {
-        Self { tx }
+        Self { tx, node_id: None }
+    }
+
+    pub(in crate::workspace) fn for_node(mut self, node_id: NodeId) -> Self {
+        self.node_id = Some(node_id);
+        self
     }
 }
 
 impl SshPromptHandler for NativeSshPromptHandler {
+    fn password(
+        &self,
+        prompt: oxideterm_ssh::SshPasswordPrompt,
+    ) -> Pin<
+        Box<
+            dyn Future<Output = Result<oxideterm_ssh::SshPasswordResponse, SshPromptError>>
+                + Send
+                + '_,
+        >,
+    > {
+        Box::pin(async move {
+            let (response_tx, response_rx) = oneshot::channel();
+            self.tx
+                .send(SshConnectionWorkerResult::PasswordPrompt {
+                    node_id: self.node_id.clone(),
+                    prompt,
+                    response_tx,
+                })
+                .map_err(|_| {
+                    SshPromptError::Failed("native SSH prompt UI is unavailable".into())
+                })?;
+            response_rx
+                .await
+                .map_err(|_| SshPromptError::Failed("native SSH prompt UI was closed".into()))?
+        })
+    }
+
     fn keyboard_interactive(
         &self,
         request: KeyboardInteractivePromptRequest,

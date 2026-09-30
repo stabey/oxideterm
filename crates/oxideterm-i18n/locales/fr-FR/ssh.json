@@ -222,6 +222,9 @@
       }
     },
     "kbi": {
+      "save_password_after_login": "Enregistrer le mot de passe après une connexion réussie",
+      "password_saved": "Mot de passe SSH enregistré",
+      "save_password_failed": "Impossible d’enregistrer le mot de passe SSH. La connexion reste ouverte.",
       "title": "Authentification clavier interactive",
       "continue": "Continuer",
       "cancelled": "L’authentification clavier interactive a été annulée."

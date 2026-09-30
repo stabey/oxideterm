@@ -82,7 +82,8 @@ pub use transport::{
     BoxedSshForwardStream, KeyboardInteractivePrompt, KeyboardInteractivePromptRequest,
     KeyboardInteractiveResponses, ManagedKeyMaterial, ManagedKeyResolver, RemoteForwardHandler,
     RemoteForwardedTcpIp, SshCommandOutput, SshForwardStream, SshOutputBoundary,
-    SshOutputCancellation, SshOutputChunk, SshPromptError, SshPromptHandler, SshPtyHandle,
+    SshOutputCancellation, SshOutputChunk, SshPasswordPrompt, SshPasswordResponse, SshPromptError,
+    SshPromptHandler, SshPtyHandle,
     SshSecretCommandOutput, SshShellChannel, SshTransportClient, SshTransportCommand,
     SshTransportError, X11ForwardHandler, X11ForwardedChannel,
 };

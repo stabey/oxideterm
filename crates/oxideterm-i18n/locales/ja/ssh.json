@@ -222,6 +222,9 @@
       }
     },
     "kbi": {
+      "save_password_after_login": "ログイン成功後にパスワードを保存",
+      "password_saved": "SSH パスワードを保存しました",
+      "save_password_failed": "SSH パスワードを保存できませんでした。接続は維持されています。",
       "title": "キーボード対話認証",
       "continue": "続行",
       "cancelled": "キーボード対話認証はキャンセルされました。"

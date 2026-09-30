@@ -222,6 +222,9 @@
       }
     },
     "kbi": {
+      "save_password_after_login": "登入成功後儲存密碼",
+      "password_saved": "SSH 密碼已儲存",
+      "save_password_failed": "無法儲存 SSH 密碼，目前連線仍保持開啟。",
       "title": "鍵盤互動認證",
       "continue": "繼續",
       "cancelled": "鍵盤互動認證已取消。"

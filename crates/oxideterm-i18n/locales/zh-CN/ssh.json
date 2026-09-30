@@ -222,6 +222,9 @@
       }
     },
     "kbi": {
+      "save_password_after_login": "登录成功后保存密码",
+      "password_saved": "SSH 密码已保存",
+      "save_password_failed": "无法保存 SSH 密码，当前连接仍保持打开。",
       "title": "键盘交互认证",
       "continue": "继续",
       "cancelled": "键盘交互认证已取消。"

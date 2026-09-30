@@ -222,6 +222,9 @@
       }
     },
     "kbi": {
+      "save_password_after_login": "Salvar a senha após entrar com sucesso",
+      "password_saved": "Senha SSH salva",
+      "save_password_failed": "Não foi possível salvar a senha SSH. A conexão permanece aberta.",
       "title": "Autenticação interativa por teclado",
       "continue": "Continuar",
       "cancelled": "A autenticação interativa por teclado foi cancelada."

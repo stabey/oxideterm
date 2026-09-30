@@ -5,6 +5,7 @@ mod form_view;
 mod ftp;
 mod host_key_dialog;
 mod kbi_dialog;
+mod password_prompt;
 mod ssh_flow;
 
 pub(super) use entity::{

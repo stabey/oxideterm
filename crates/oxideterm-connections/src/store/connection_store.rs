@@ -2727,22 +2727,28 @@ impl ConnectionStore {
     }
 
     pub fn get_saved_auth_password(&self, auth: &SavedAuth) -> Result<SecretString> {
+        self.get_saved_auth_password_optional(auth)?
+            .ok_or_else(|| anyhow::anyhow!("Password not saved for this connection"))
+    }
+
+    /// Distinguishes a missing credential from a locked or unavailable secret store.
+    pub fn get_saved_auth_password_optional(&self, auth: &SavedAuth) -> Result<Option<SecretString>> {
         let auth = auth.conventional_fallback();
         if auth.uses_empty_password() {
-            return Ok(SecretString::default());
+            return Ok(Some(SecretString::default()));
         }
         match auth {
             SavedAuth::Password {
                 keychain_id: Some(keychain_id),
                 ..
-            } => self.keychain.get(keychain_id),
+            } => self.keychain.get_optional(keychain_id),
             SavedAuth::Password {
                 plaintext_password: Some(password),
                 ..
-            } => Ok(password.clone()),
+            } => Ok(Some(password.clone())),
             SavedAuth::Password {
                 keychain_id: None, ..
-            } => bail!("Password not saved for this connection"),
+            } => Ok(None),
             _ => bail!("Connection does not use password auth"),
         }
     }

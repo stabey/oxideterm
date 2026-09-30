@@ -952,12 +952,14 @@ mod tests {
             "replacement"
         );
         assert!(store.get("conn-1").unwrap().last_used_at.is_none());
+        let retained_auth = store.get("conn-1").unwrap().auth.clone();
         assert!(
             store
                 .forget_connection_credential("conn-1", ConnectionCredentialSlot::Primary)
                 .unwrap()
         );
         assert!(store.get_connection_password("conn-1").is_err());
+        assert_eq!(store.get_saved_auth_password_optional(&retained_auth).unwrap(), None);
     }
 
     #[test]

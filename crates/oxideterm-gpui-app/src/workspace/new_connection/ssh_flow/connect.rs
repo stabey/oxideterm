@@ -428,6 +428,16 @@ impl WorkspaceApp {
                 } => {
                     self.open_keyboard_interactive_challenge(request, response_tx, window, cx);
                 }
+                SshConnectionWorkerResult::PasswordPrompt {
+                    node_id,
+                    prompt,
+                    response_tx,
+                } => {
+                    self.open_password_prompt(node_id, prompt, response_tx, window, cx);
+                }
+                SshConnectionWorkerResult::PasswordAuthenticated { target, password } => {
+                    self.save_authenticated_prompt_password(target, password, cx);
+                }
             }
         }
     }

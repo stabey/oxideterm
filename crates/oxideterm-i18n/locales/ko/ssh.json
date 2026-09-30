@@ -222,6 +222,9 @@
       }
     },
     "kbi": {
+      "save_password_after_login": "로그인 성공 후 비밀번호 저장",
+      "password_saved": "SSH 비밀번호가 저장되었습니다",
+      "save_password_failed": "SSH 비밀번호를 저장할 수 없습니다. 연결은 유지됩니다.",
       "title": "키보드 대화형 인증",
       "continue": "계속",
       "cancelled": "키보드 대화형 인증이 취소되었습니다."

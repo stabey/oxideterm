@@ -1492,6 +1492,7 @@ impl WorkspaceApp {
                 })
                 .transpose()?;
             let prompt_handler = self.workspace_runtime.read(cx).native_ssh_prompt_handler();
+            let prompt_handler = Arc::new(prompt_handler.as_ref().clone().for_node(node_id.clone()));
             SshSessionConfig::for_dedicated_connection(
                 runtime_snapshot.config,
                 parent_connection_id,

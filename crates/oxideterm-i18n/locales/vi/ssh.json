@@ -222,6 +222,9 @@
       }
     },
     "kbi": {
+      "save_password_after_login": "Lưu mật khẩu sau khi đăng nhập thành công",
+      "password_saved": "Đã lưu mật khẩu SSH",
+      "save_password_failed": "Không thể lưu mật khẩu SSH. Kết nối vẫn được duy trì.",
       "title": "Xác thực tương tác bàn phím",
       "continue": "Tiếp tục",
       "cancelled": "Xác thực tương tác bàn phím đã bị hủy."

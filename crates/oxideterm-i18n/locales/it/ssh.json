@@ -222,6 +222,9 @@
       }
     },
     "kbi": {
+      "save_password_after_login": "Salva la password dopo un accesso riuscito",
+      "password_saved": "Password SSH salvata",
+      "save_password_failed": "Impossibile salvare la password SSH. La connessione rimane aperta.",
       "title": "Autenticazione interattiva da tastiera",
       "continue": "Continua",
       "cancelled": "L'autenticazione interattiva da tastiera è stata annullata."
