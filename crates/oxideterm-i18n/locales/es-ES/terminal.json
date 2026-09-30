@@ -168,6 +168,7 @@
       "started": "Registro de sesión iniciado",
       "start_failed": "No se pudo iniciar el registro de sesión",
       "write_failed": "El registro de sesión se detuvo porque no se pudo escribir el archivo",
+      "overloaded": "El registro de sesión se detuvo porque la salida superó el búfer de escritura. Reinícialo cuando disminuya la salida.",
       "stopped": "Registro de sesión guardado",
       "stop_failed": "No se pudo finalizar el registro de sesión",
       "start": "Iniciar registro de sesión",

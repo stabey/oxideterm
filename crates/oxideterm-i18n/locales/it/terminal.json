@@ -168,6 +168,7 @@
       "started": "Registrazione della sessione avviata",
       "start_failed": "Impossibile avviare il registro della sessione",
       "write_failed": "Il registro della sessione è stato arrestato perché il file non può essere scritto",
+      "overloaded": "La registrazione della sessione è stata interrotta perché l’output ha superato il buffer di scrittura. Riavviala quando l’output diminuisce.",
       "stopped": "Registro della sessione salvato",
       "stop_failed": "Impossibile completare il registro della sessione",
       "start": "Avvia registro sessione",

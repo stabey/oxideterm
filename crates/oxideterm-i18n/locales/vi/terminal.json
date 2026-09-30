@@ -168,6 +168,7 @@
       "started": "Đã bắt đầu nhật ký phiên",
       "start_failed": "Không thể bắt đầu nhật ký phiên",
       "write_failed": "Nhật ký phiên đã dừng vì không thể ghi tệp",
+      "overloaded": "Việc ghi nhật ký phiên đã dừng vì đầu ra vượt quá bộ đệm ghi. Hãy bắt đầu ghi lại khi đầu ra chậm lại.",
       "stopped": "Đã lưu nhật ký phiên",
       "stop_failed": "Không thể hoàn tất nhật ký phiên",
       "start": "Bắt đầu nhật ký phiên",

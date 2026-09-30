@@ -1339,6 +1339,7 @@ impl WorkspaceApp {
             session_log_labels: TerminalSessionLogLabels {
                 start_failed: self.i18n.t("terminal.session_log.start_failed"),
                 write_failed: self.i18n.t("terminal.session_log.write_failed"),
+                overloaded: self.i18n.t("terminal.session_log.overloaded"),
             },
             trzsz_labels: TerminalTrzszLabels {
                 select_upload_directory_title: self

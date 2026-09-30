@@ -612,6 +612,7 @@ impl Default for TerminalSerialControlLabels {
 pub struct TerminalSessionLogLabels {
     pub start_failed: String,
     pub write_failed: String,
+    pub overloaded: String,
 }
 
 #[derive(Clone, Debug)]

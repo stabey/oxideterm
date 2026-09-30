@@ -200,17 +200,22 @@ impl TerminalPane {
         result
     }
 
-    fn handle_session_log_failure(&mut self, cx: &mut Context<Self>) {
+    fn handle_session_log_failure(&mut self, overloaded: bool, cx: &mut Context<Self>) {
         // Failure drops only this pane's file sink and leaves the terminal session alive.
         self.last_session_log_path = self.session_log.as_ref().and_then(|log| log.status().path);
         self.session_log.take();
         self.sync_terminal_output_events_enabled();
         cx.emit(TerminalPaneEvent::SessionLogStatusChanged);
+        let message = if overloaded {
+            &self.preferences.session_log_labels.overloaded
+        } else {
+            &self.preferences.session_log_labels.write_failed
+        };
         if let Some(sink) = &self.preferences.notice_sink
-            && !self.preferences.session_log_labels.write_failed.is_empty()
+            && !message.is_empty()
         {
             sink(TerminalNotice {
-                title: self.preferences.session_log_labels.write_failed.clone(),
+                title: message.clone(),
                 description: None,
                 status_text: None,
                 progress: None,

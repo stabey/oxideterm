@@ -168,6 +168,7 @@
       "started": "Registro de sessão iniciado",
       "start_failed": "Não foi possível iniciar o registro de sessão",
       "write_failed": "O registro de sessão foi interrompido porque o arquivo não pôde ser gravado",
+      "overloaded": "O registro da sessão foi interrompido porque a saída excedeu o buffer de gravação. Reinicie quando a saída diminuir.",
       "stopped": "Registro de sessão salvo",
       "stop_failed": "Não foi possível finalizar o registro de sessão",
       "start": "Iniciar registro de sessão",

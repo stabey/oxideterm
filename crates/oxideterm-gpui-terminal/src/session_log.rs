@@ -1,4 +1,5 @@
 use std::{
+    collections::VecDeque,
     fs::{self, File, OpenOptions},
     io::{self, BufWriter, Write},
     path::{Path, PathBuf},
@@ -20,8 +21,8 @@ use oxideterm_settings::{
 };
 use zeroize::Zeroizing;
 
-const SESSION_LOG_QUEUE_CAPACITY: usize = 256;
 const SESSION_LOG_CHUNK_BYTES: usize = 64 * 1024;
+const SESSION_LOG_BUFFER_BYTES: usize = 16 * 1024 * 1024;
 const SESSION_LOG_FLUSH_INTERVAL: Duration = Duration::from_millis(250);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -72,9 +73,54 @@ pub struct TerminalSessionLogContext {
 }
 
 enum SessionLogCommand {
-    Output(Zeroizing<Vec<u8>>),
+    Output,
     Flush(SyncSender<bool>),
     Finish,
+}
+
+#[derive(Default)]
+struct SessionLogOutput {
+    chunks: VecDeque<Zeroizing<Vec<u8>>>,
+    bytes: usize,
+}
+
+impl SessionLogOutput {
+    fn append(&mut self, mut bytes: &[u8]) -> io::Result<()> {
+        if bytes.len() > SESSION_LOG_BUFFER_BYTES.saturating_sub(self.bytes) {
+            tracing::warn!(
+                buffered_bytes = self.bytes,
+                incoming_bytes = bytes.len(),
+                capacity_bytes = SESSION_LOG_BUFFER_BYTES,
+                "terminal session log writer is overloaded"
+            );
+            return Err(io::Error::new(
+                io::ErrorKind::WouldBlock,
+                "terminal session log writer is overloaded",
+            ));
+        }
+        self.bytes += bytes.len();
+        while !bytes.is_empty() {
+            if self
+                .chunks
+                .back()
+                .is_none_or(|chunk| chunk.len() == SESSION_LOG_CHUNK_BYTES)
+            {
+                self.chunks.push_back(Zeroizing::new(Vec::new()));
+            }
+            let chunk = self.chunks.back_mut().unwrap();
+            let count = bytes.len().min(SESSION_LOG_CHUNK_BYTES - chunk.len());
+            let required = chunk.len() + count;
+            if chunk.capacity() < required {
+                // Growing by replacement wipes the old allocation; sparse output stays inexpensive.
+                let mut grown = Zeroizing::new(Vec::with_capacity(required.next_power_of_two()));
+                grown.extend_from_slice(chunk);
+                *chunk = grown;
+            }
+            chunk.extend_from_slice(&bytes[..count]);
+            bytes = &bytes[count..];
+        }
+        Ok(())
+    }
 }
 
 #[derive(Default)]
@@ -87,6 +133,7 @@ pub struct TerminalSessionLog {
     state: TerminalSessionLogState,
     path: PathBuf,
     sender: Option<SyncSender<SessionLogCommand>>,
+    output: Arc<Mutex<SessionLogOutput>>,
     worker: Option<JoinHandle<io::Result<()>>>,
     bytes_written: Arc<AtomicU64>,
     failure: Arc<Mutex<SessionLogFailure>>,
@@ -151,7 +198,10 @@ impl TerminalSessionLog {
                 "terminal session log already reached its size limit",
             ));
         }
-        let (sender, receiver) = mpsc::sync_channel(SESSION_LOG_QUEUE_CAPACITY);
+        // The channel carries wakeups and barriers, not one slot per terminal fragment.
+        let (sender, receiver) = mpsc::sync_channel(1);
+        let output = Arc::new(Mutex::new(SessionLogOutput::default()));
+        let worker_output = output.clone();
         let bytes_written = Arc::new(AtomicU64::new(initial_bytes));
         let failure = Arc::new(Mutex::new(SessionLogFailure::default()));
         let worker_bytes_written = bytes_written.clone();
@@ -162,12 +212,21 @@ impl TerminalSessionLog {
                 let result = run_session_log_writer(
                     file,
                     receiver,
+                    worker_output,
                     worker_bytes_written,
                     options.include_control_sequences,
                     options.max_file_bytes,
                     content_template,
                     options.context,
                 );
+                if let Err(error) = &result {
+                    // Error categories are diagnostic data; terminal contents and paths are not.
+                    tracing::warn!(
+                        error_kind = ?error.kind(),
+                        os_error = error.raw_os_error(),
+                        "terminal session log writer failed"
+                    );
+                }
                 if result.is_err()
                     && let Ok(mut failure) = worker_failure.lock()
                 {
@@ -184,6 +243,7 @@ impl TerminalSessionLog {
             state: TerminalSessionLogState::Logging,
             path,
             sender: Some(sender),
+            output,
             worker: Some(worker),
             bytes_written,
             failure,
@@ -253,13 +313,22 @@ impl TerminalSessionLog {
             return Err(io::Error::other("terminal session log writer failed"));
         }
 
-        if bytes.len() <= SESSION_LOG_CHUNK_BYTES {
-            return self.try_send(SessionLogCommand::Output(bytes));
+        self.output
+            .lock()
+            .map_err(|_| io::Error::other("terminal session log buffer unavailable"))?
+            .append(&bytes)?;
+        // A full channel already holds a wakeup. No output is discarded or blocked on disk I/O.
+        match self
+            .sender
+            .as_ref()
+            .ok_or_else(|| io::Error::other("terminal session log writer stopped"))?
+            .try_send(SessionLogCommand::Output)
+        {
+            Ok(()) | Err(TrySendError::Full(_)) => Ok(()),
+            Err(TrySendError::Disconnected(_)) => {
+                Err(io::Error::other("terminal session log writer stopped"))
+            }
         }
-        for chunk in bytes.chunks(SESSION_LOG_CHUNK_BYTES) {
-            self.try_send(SessionLogCommand::Output(Zeroizing::new(chunk.to_vec())))?;
-        }
-        Ok(())
     }
 
     pub fn finish(mut self) -> io::Result<PathBuf> {
@@ -283,23 +352,6 @@ impl TerminalSessionLog {
             .ok_or_else(|| io::Error::other("terminal session log writer stopped"))?
             .send(command)
             .map_err(|_| io::Error::other("terminal session log writer stopped"))
-    }
-
-    fn try_send(&self, command: SessionLogCommand) -> io::Result<()> {
-        match self
-            .sender
-            .as_ref()
-            .ok_or_else(|| io::Error::other("terminal session log writer stopped"))?
-            .try_send(command)
-        {
-            Ok(()) => Ok(()),
-            Err(TrySendError::Full(_)) => Err(io::Error::other(
-                "terminal session log writer is overloaded",
-            )),
-            Err(TrySendError::Disconnected(_)) => {
-                Err(io::Error::other("terminal session log writer stopped"))
-            }
-        }
     }
 
     fn join_worker(&mut self) -> io::Result<()> {
@@ -326,6 +378,7 @@ impl Drop for TerminalSessionLog {
 fn run_session_log_writer(
     file: File,
     receiver: mpsc::Receiver<SessionLogCommand>,
+    output: Arc<Mutex<SessionLogOutput>>,
     bytes_written: Arc<AtomicU64>,
     include_control_sequences: bool,
     max_file_bytes: Option<u64>,
@@ -356,19 +409,27 @@ fn run_session_log_writer(
             }
         };
         match command {
-            SessionLogCommand::Output(bytes) => {
-                if include_control_sequences {
-                    line_formatter.write(&mut writer, &bytes)?;
-                } else {
-                    let printable = printable_filter.filter(&bytes);
-                    line_formatter.write(&mut writer, printable.as_bytes())?;
-                }
-                dirty = true;
-                // Continuous output must not postpone flushing until the queue becomes idle.
-                if last_flush.elapsed() >= SESSION_LOG_FLUSH_INTERVAL {
-                    writer.flush()?;
-                    last_flush = Instant::now();
-                    dirty = false;
+            SessionLogCommand::Output => {
+                // Swap under the lock; parsing and disk writes never hold the producer's buffer lock.
+                // At most one 16 MiB batch is in flight and one 16 MiB batch is pending.
+                let batch =
+                    std::mem::take(&mut *output.lock().map_err(|_| {
+                        io::Error::other("terminal session log buffer unavailable")
+                    })?);
+                for bytes in batch.chunks {
+                    if include_control_sequences {
+                        line_formatter.write(&mut writer, &bytes)?;
+                    } else {
+                        let printable = printable_filter.filter(&bytes);
+                        line_formatter.write(&mut writer, printable.as_bytes())?;
+                    }
+                    dirty = true;
+                    // Continuous output must not postpone flushing until the queue becomes idle.
+                    if last_flush.elapsed() >= SESSION_LOG_FLUSH_INTERVAL {
+                        writer.flush()?;
+                        last_flush = Instant::now();
+                        dirty = false;
+                    }
                 }
             }
             SessionLogCommand::Flush(acknowledge) => match writer.flush() {
@@ -547,13 +608,15 @@ impl Write for BoundedLogWriter {
         let written = self.bytes_written.load(Ordering::Relaxed);
         if let Some(max_bytes) = self.max_bytes {
             if written >= max_bytes {
-                return Err(io::Error::other(
+                return Err(io::Error::new(
+                    io::ErrorKind::FileTooLarge,
                     "terminal session log reached its size limit",
                 ));
             }
             let remaining = (max_bytes - written).min(buffer.len() as u64) as usize;
             if remaining < buffer.len() {
-                return Err(io::Error::other(
+                return Err(io::Error::new(
+                    io::ErrorKind::FileTooLarge,
                     "terminal session log reached its size limit",
                 ));
             }
@@ -1023,6 +1086,53 @@ mod tests {
         let path = log.finish().unwrap();
 
         assert_eq!(fs::read_to_string(path).unwrap(), "before\nafter\n");
+    }
+
+    #[test]
+    fn stalled_writer_accepts_small_fragments_and_rejects_over_budget_output_atomically() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("burst.log");
+        let file = File::create(&path).unwrap();
+        let (sender, receiver) = mpsc::sync_channel(1);
+        let output = Arc::new(Mutex::new(SessionLogOutput::default()));
+        let written = Arc::new(AtomicU64::new(0));
+        let mut log = TerminalSessionLog {
+            state: TerminalSessionLogState::Logging,
+            path: path.clone(),
+            sender: Some(sender),
+            output: output.clone(),
+            worker: None,
+            bytes_written: written.clone(),
+            failure: Arc::new(Mutex::new(SessionLogFailure::default())),
+        };
+        // No receiver runs until the entire burst has arrived, independent of thread scheduling.
+        for _ in 0..10_000 {
+            log.write_output(b"first\x1b[31m red\x1b[0m\r\n".to_vec())
+                .unwrap();
+        }
+        let error = log
+            .write_output(vec![b'x'; SESSION_LOG_BUFFER_BYTES])
+            .unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::WouldBlock);
+        log.write_output(b"last".to_vec()).unwrap();
+        log.worker = Some(thread::spawn(move || {
+            run_session_log_writer(
+                file,
+                receiver,
+                output,
+                written,
+                false,
+                None,
+                parse_terminal_session_log_content_template("{text}").unwrap(),
+                TerminalSessionLogContext::default(),
+            )
+        }));
+        log.flush().unwrap();
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            format!("{}last", "first red\r\n".repeat(10_000))
+        );
+        log.finish().unwrap();
     }
 
     #[test]

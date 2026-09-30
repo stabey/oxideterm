@@ -168,6 +168,7 @@
       "started": "Sitzungsprotokollierung gestartet",
       "start_failed": "Sitzungsprotokollierung konnte nicht gestartet werden",
       "write_failed": "Sitzungsprotokollierung wurde wegen eines Schreibfehlers beendet",
+      "overloaded": "Die Sitzungsspeicherung wurde gestoppt, da die Ausgabe den Schreibpuffer überschritten hat. Starten Sie sie bei geringerer Ausgabe erneut.",
       "stopped": "Sitzungsprotokoll gespeichert",
       "stop_failed": "Sitzungsprotokoll konnte nicht abgeschlossen werden",
       "start": "Sitzungsprotokoll starten",

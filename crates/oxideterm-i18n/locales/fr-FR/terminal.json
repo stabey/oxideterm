@@ -168,6 +168,7 @@
       "started": "Journal de session démarré",
       "start_failed": "Impossible de démarrer le journal de session",
       "write_failed": "Le journal de session a été arrêté car le fichier ne pouvait pas être écrit",
+      "overloaded": "Le journal de session a été arrêté car la sortie a dépassé le tampon d’écriture. Relancez-le lorsque le débit diminue.",
       "stopped": "Journal de session enregistré",
       "stop_failed": "Impossible de terminer le journal de session",
       "start": "Démarrer le journal de session",

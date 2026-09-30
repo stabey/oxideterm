@@ -3084,7 +3084,7 @@ impl TerminalPane {
             .as_ref()
             .is_some_and(TerminalSessionLog::has_failed)
         {
-            self.handle_session_log_failure(cx);
+            self.handle_session_log_failure(false, cx);
         }
 
         let cleared_command_mark_selection = self.clear_command_mark_selection_for_tui_mode(mode);
@@ -3428,12 +3428,12 @@ impl TerminalPane {
                 if let Some(recorder) = self.recorder.as_mut() {
                     recorder.record_output(&bytes);
                 }
-                let session_log_failed = self
+                let session_log_error = self
                     .session_log
                     .as_mut()
-                    .is_some_and(|log| log.write_output(bytes).is_err());
-                if session_log_failed {
-                    self.handle_session_log_failure(cx);
+                    .and_then(|log| log.write_output(bytes).err());
+                if let Some(error) = session_log_error {
+                    self.handle_session_log_failure(error.kind() == std::io::ErrorKind::WouldBlock, cx);
                 }
                 TerminalEventEffect::default()
             }

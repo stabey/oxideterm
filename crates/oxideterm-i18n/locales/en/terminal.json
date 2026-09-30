@@ -256,6 +256,7 @@
       "started": "Session logging started",
       "start_failed": "Could not start session logging",
       "write_failed": "Session logging stopped because the file could not be written",
+      "overloaded": "Session logging stopped because output exceeded the write buffer. Restart logging when output slows down.",
       "stopped": "Session log saved",
       "stop_failed": "Could not finish the session log",
       "start": "Start Session Log",
