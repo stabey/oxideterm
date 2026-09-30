@@ -1417,7 +1417,7 @@ impl TerminalElement {
             col: marked_col,
             text: SharedString::from(text.clone()),
             cells: marked_text_cells_before_utf16(text, usize::MAX).max(1),
-            style: marked_text_run(text, &self.metrics),
+            style: marked_text_run(text, &self.theme, &self.metrics),
             cache: None,
         })
     }

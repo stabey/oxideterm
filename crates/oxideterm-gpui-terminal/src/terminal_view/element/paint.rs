@@ -699,6 +699,10 @@ pub(crate) fn paint_grid_text_run(
     window: &mut Window,
     cx: &mut App,
 ) {
+    if let Some(color) = run.style.background_color {
+        // Preedit owns an opaque grid surface so application colors and glyphs cannot bleed through.
+        paint_terminal_rect_at(run.row, run.col, run.cells, color, origin, metrics, window);
+    }
     for segment in ghost_text_grid_segments(&run.text) {
         let position = origin
             + point(
