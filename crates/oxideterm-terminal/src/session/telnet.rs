@@ -684,6 +684,10 @@ impl TelnetSession {
                     .push(TerminalEvent::ClipboardLoad(formatter));
                 false
             }
+            AlacEvent::ColorSchemeRequest => {
+                let _ = self.write_protocol_bytes(self.palette.color_scheme_report().as_bytes());
+                false
+            }
             AlacEvent::ColorRequest(index, formatter) => {
                 let color = crate::color_for_alacritty_request(
                     index,
@@ -825,6 +829,7 @@ impl TerminalSessionBackend for TelnetSession {
         self.palette = palette;
         // Unchanged rows still hold colors resolved from the old palette.
         self.term.lock().mark_fully_damaged();
+        self.term.lock().notify_palette_changed();
     }
 
     fn set_encoding(&mut self, encoding: TerminalEncoding) {

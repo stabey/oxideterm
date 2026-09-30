@@ -438,6 +438,7 @@ impl LocalPtySession {
         self.palette = palette;
         // Unchanged rows still hold colors resolved from the old palette.
         self.term.lock().mark_fully_damaged();
+        self.term.lock().notify_palette_changed();
         self.tmux_display.set_palette(palette);
         for command in self.tmux_display.palette_report_commands() {
             let _ = self.write_control_bytes(command, None);
@@ -663,6 +664,10 @@ impl LocalPtySession {
             AlacEvent::ClipboardLoad(_, formatter) => {
                 self.pending_events
                     .push(TerminalEvent::ClipboardLoad(formatter));
+                false
+            }
+            AlacEvent::ColorSchemeRequest => {
+                let _ = self.write_protocol_bytes(self.palette.color_scheme_report().as_bytes());
                 false
             }
             AlacEvent::ColorRequest(index, formatter) => {

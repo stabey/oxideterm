@@ -642,6 +642,10 @@ impl SshParser {
                     .push(TerminalEvent::ClipboardLoad(formatter));
                 false
             }
+            AlacEvent::ColorSchemeRequest => {
+                let _ = self.write_protocol_bytes(self.palette.color_scheme_report().as_bytes());
+                false
+            }
             AlacEvent::ColorRequest(index, formatter) => {
                 let color = crate::color_for_alacritty_request(
                     index,
@@ -749,6 +753,7 @@ impl SshParser {
         self.palette = palette;
         // Unchanged rows still hold colors resolved from the old palette.
         self.term.lock().mark_fully_damaged();
+        self.term.lock().notify_palette_changed();
         self.tmux_display.set_palette(palette);
         let commands = self.tmux_display.palette_report_commands();
         if !commands.is_empty() {

@@ -11,7 +11,7 @@ use alacritty_terminal::{
     event::EventListener,
     grid::Dimensions,
     sync::FairMutex,
-    term::Term,
+    term::{Term, TermMode},
     vte::ansi::{NamedColor, Processor},
 };
 use oxideterm_terminal_encoding::{TerminalEncoding, TerminalOutputDecoder};
@@ -704,28 +704,35 @@ impl TmuxDisplay {
             .report_client_colors = enabled;
     }
 
-    /// Re-reports default colors for every pane so tmux stops answering color queries with
-    /// the colors cached before a theme change.
+    /// Refresh tmux's cached colors and notify subscribed applications in their own panes.
     pub(crate) fn palette_report_commands(&self) -> Vec<Vec<u8>> {
         let state = self
             .state
             .read()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if !state.ready || !state.report_client_colors {
+        if !state.ready {
             return Vec::new();
         }
         let palette = self.palette();
         let mut commands = Vec::new();
         for (pane, shared_pane) in &state.panes {
             let term = shared_pane.term.lock();
-            for (osc, slot) in [(10, NamedColor::Foreground), (11, NamedColor::Background)] {
-                let color =
-                    crate::color_for_alacritty_request(slot as usize, &palette, term.colors());
-                let response = format!(
-                    "\x1b]{osc};rgb:{0:02x}{0:02x}/{1:02x}{1:02x}/{2:02x}{2:02x}\x07",
-                    color.r, color.g, color.b
-                );
-                commands.extend(tmux_client_report_command(*pane, &response));
+            if state.report_client_colors {
+                for (osc, slot) in [(10, NamedColor::Foreground), (11, NamedColor::Background)] {
+                    let color =
+                        crate::color_for_alacritty_request(slot as usize, &palette, term.colors());
+                    let response = format!(
+                        "\x1b]{osc};rgb:{0:02x}{0:02x}/{1:02x}{1:02x}/{2:02x}{2:02x}\x07",
+                        color.r, color.g, color.b
+                    );
+                    commands.extend(tmux_client_report_command(*pane, &response));
+                }
+            }
+            if term.mode().contains(TermMode::REPORT_COLOR_SCHEME) {
+                commands.extend(pane_reply_commands(
+                    *pane,
+                    palette.color_scheme_report().as_bytes(),
+                ));
             }
         }
         drop(state);
@@ -1460,6 +1467,12 @@ impl TmuxController {
             match event {
                 AlacEvent::PtyWrite(text) => {
                     pane_inputs.extend(pane_reply_commands(pane, text.as_bytes()));
+                }
+                AlacEvent::ColorSchemeRequest => {
+                    pane_inputs.extend(pane_reply_commands(
+                        pane,
+                        self.display.palette().color_scheme_report().as_bytes(),
+                    ));
                 }
                 AlacEvent::ColorRequest(index, formatter) => {
                     let color = crate::color_for_alacritty_request(
@@ -2230,6 +2243,7 @@ mod tests {
                 for reply in outcome.replies {
                     display.register_written_reply(reply);
                 }
+                outcome.commands
             };
             advance(b"\x1bP1000p");
             advance(b"%begin 1 1 1\n%end 1 1 1\n");
@@ -2262,6 +2276,21 @@ mod tests {
                 expected,
                 "tmux {version}"
             );
+            let theme_report = b"send-keys -H -t %1 1b 5b 3f 39 39 37 3b 32 6e\n".to_vec();
+            assert_eq!(
+                advance(b"%output %1 \\033[?2031h\\033[?996n\n"),
+                vec![theme_report.clone()],
+                "tmux {version} must send DSR to the querying pane"
+            );
+            let mut subscribed = expected.clone();
+            subscribed.push(theme_report);
+            assert_eq!(
+                display.palette_report_commands(),
+                subscribed,
+                "tmux {version}"
+            );
+            advance(b"%output %1 \\033[?2031l\n");
+            assert_eq!(display.palette_report_commands(), expected, "tmux {version}");
         }
     }
 

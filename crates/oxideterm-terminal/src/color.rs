@@ -21,6 +21,20 @@ pub struct TerminalPalette {
 }
 
 impl TerminalPalette {
+    /// Report the host preference even when an application overrides its background with OSC 11.
+    pub(crate) fn color_scheme_report(&self) -> &'static str {
+        let background = Rgb {
+            r: self.background.r,
+            g: self.background.g,
+            b: self.background.b,
+        };
+        if background.luminance() > 0.5 {
+            "\x1b[?997;2n"
+        } else {
+            "\x1b[?997;1n"
+        }
+    }
+
     pub fn new(
         foreground: TerminalColor,
         background: TerminalColor,

@@ -176,6 +176,44 @@ fn ssh_palette_changes_rebuild_rows_and_answer_color_queries() {
 }
 
 #[test]
+fn ssh_color_scheme_reports_follow_theme_changes_only_while_subscribed() {
+    let mut fixture = Fixture::new();
+    let input = fixture.input.clone();
+    let expect_reply = |expected: &[u8]| {
+        let mut actual = Vec::new();
+        while actual.len() < expected.len() {
+            actual.extend(input.recv_timeout(Duration::from_secs(5)).unwrap().0);
+        }
+        assert_eq!(actual, expected);
+    };
+    fixture.send(b"\x1b[?2031$p\x1b[?996n");
+    expect_reply(b"\x1b[?2031;2$y\x1b[?997;1n");
+
+    fixture.send(b"\x1b[?2031h\x1b[?2031$p");
+    expect_reply(b"\x1b[?2031;1$y");
+    let mut light = crate::color::OXIDETERM_DARK_THEME;
+    light.background = TerminalColor::rgb(0xfd, 0xf6, 0xe3);
+    fixture.terminal.set_palette(light);
+    expect_reply(b"\x1b[?997;2n");
+
+    fixture
+        .terminal
+        .set_palette(crate::color::OXIDETERM_DARK_THEME);
+    expect_reply(b"\x1b[?997;1n");
+    // An application-owned OSC change must not masquerade as a host theme change.
+    fixture.send(b"\x1b]11;#ffffff\x07\x1b[?996n\x1b[5n");
+    expect_reply(b"\x1b[?997;1n\x1b[0n");
+    fixture.send(b"\x1b[?2031l\x1b[?2031$p");
+    expect_reply(b"\x1b[?2031;2$y");
+    fixture.terminal.set_palette(light);
+    fixture.barrier();
+    fixture.send(b"\x1b[5n");
+    expect_reply(b"\x1b[0n");
+    fixture.send(b"\x1b[?2031h\x1bc\x1b[?2031$p");
+    expect_reply(b"\x1b[?2031;2$y");
+}
+
+#[test]
 fn ssh_control_boundary_preserves_recording_encoding_resize_and_clear_order() {
     let mut fixture = Fixture::new();
     fixture.terminal.set_output_events_enabled(true);
