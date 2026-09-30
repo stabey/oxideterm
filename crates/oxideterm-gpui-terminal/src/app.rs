@@ -3507,7 +3507,7 @@ impl TerminalPane {
                 );
                 TerminalEventEffect::notify()
             }
-            TerminalEvent::StartupFailed => {
+            TerminalEvent::StartupFailed | TerminalEvent::ConnectionLost => {
                 self.command_fact_ledger.interrupt_audit_commands();
                 self.cancel_pending_tmux_mouse();
                 self.notify_trzsz_connection_lost_if_active();
@@ -5028,6 +5028,44 @@ mod tests {
                 )
             );
         });
+    }
+
+    #[gpui::test]
+    fn connection_loss_does_not_request_pane_auto_close(cx: &mut TestAppContext) {
+        let (_, cx) = cx.add_window_view(|_window, _cx| TerminalTestRoot);
+        for (event, expected) in [
+            (TerminalEvent::ConnectionLost, Vec::new()),
+            (
+                TerminalEvent::ChildExited(Some(37)),
+                vec![TerminalPaneEvent::Exited {
+                    exit_code: Some(37),
+                }],
+            ),
+        ] {
+            let pane = cx.update(|window, cx| {
+                cx.new(|cx| {
+                    TerminalPane::new_recording_playback(
+                        DEFAULT_COLS,
+                        DEFAULT_ROWS,
+                        TerminalUiPreferences::default(),
+                        window,
+                        cx,
+                    )
+                    .unwrap()
+                })
+            });
+            let events = Rc::new(std::cell::RefCell::new(Vec::new()));
+            let received = events.clone();
+            let _subscription = cx.update(|_, cx| {
+                cx.subscribe(&pane, move |_, event, _| received.borrow_mut().push(*event))
+            });
+            pane.update(cx, |pane, cx| {
+                pane.handle_terminal_event(event, cx);
+                assert!(pane.terminal_exited);
+            });
+            cx.run_until_parked();
+            assert_eq!(*events.borrow(), expected);
+        }
     }
 
     #[gpui::test]

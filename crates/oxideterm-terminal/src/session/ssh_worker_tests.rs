@@ -102,6 +102,79 @@ fn wait_until(mut ready: impl FnMut() -> bool) {
 }
 
 #[test]
+fn ssh_transport_disconnect_preserves_output_without_reporting_process_exit() {
+    let mut fixture = Fixture::new();
+    fixture.send(b"retained before disconnect\r\n");
+    wait_until(|| {
+        fixture
+            .terminal
+            .buffer_text()
+            .contains("retained before disconnect")
+    });
+    fixture
+        .runtime
+        .block_on(fixture.peer.disconnect(
+            russh::Disconnect::ByApplication,
+            "fixture disconnect".into(),
+            "".into(),
+        ))
+        .unwrap();
+    wait_until(|| !fixture.terminal.lifecycle().is_running());
+    let terminal_events = fixture
+        .terminal
+        .take_events()
+        .into_iter()
+        .filter_map(|event| match event {
+            TerminalEvent::ConnectionLost => Some("connection lost"),
+            TerminalEvent::ChildExited(_) => Some("process exit"),
+            TerminalEvent::StartupFailed => Some("startup failed"),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(terminal_events, ["connection lost"]);
+    assert!(
+        fixture
+            .terminal
+            .buffer_text()
+            .contains("retained before disconnect")
+    );
+}
+
+#[test]
+fn ssh_shell_exit_preserves_exit_status_after_eof() {
+    let mut fixture = Fixture::new();
+    fixture.runtime.block_on(async {
+        fixture
+            .peer
+            .data(fixture.channel, b"final output\r\n".to_vec())
+            .await
+            .unwrap();
+        fixture.peer.eof(fixture.channel).await.unwrap();
+        fixture
+            .peer
+            .exit_status_request(fixture.channel, 37)
+            .await
+            .unwrap();
+        fixture.peer.close(fixture.channel).await.unwrap();
+    });
+    wait_until(|| !fixture.terminal.lifecycle().is_running());
+    assert!(fixture.terminal.buffer_text().contains("final output"));
+    let exits = fixture
+        .terminal
+        .take_events()
+        .into_iter()
+        .filter_map(|event| {
+            if let TerminalEvent::ChildExited(code) = event {
+                Some(code)
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(exits, [Some(37)]);
+}
+
+#[test]
 fn ssh_parses_and_sends_replies_without_ui_drains() {
     let mut fixture = Fixture::new();
     fixture.send(b"abc\x1b[6n");
@@ -441,6 +514,16 @@ fn ssh_recording_pressure_preserves_output_and_services_input_and_close() {
         resume.send(()).unwrap();
         if !cancel {
             fixture.runtime.block_on(producer).unwrap();
+            // EOF leaves input open during recording pressure. Report process
+            // completion only after that half-closed channel has serviced input.
+            fixture.runtime.block_on(async {
+                fixture
+                    .peer
+                    .exit_status_request(fixture.channel, 0)
+                    .await
+                    .unwrap();
+                fixture.peer.close(fixture.channel).await.unwrap();
+            });
             wait_until(|| !fixture.terminal.lifecycle().is_running());
         }
         wait_until(|| {

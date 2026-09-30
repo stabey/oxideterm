@@ -90,6 +90,8 @@ pub enum TerminalEvent {
     ChildExited(Option<i32>),
     // Failed startup must remain visible instead of triggering normal exit auto-close.
     StartupFailed,
+    // A transport interruption keeps its pane available for node-owned reconnect.
+    ConnectionLost,
     ProcessingFailed,
     LoginScriptFailed,
     TmuxPaneSelected {

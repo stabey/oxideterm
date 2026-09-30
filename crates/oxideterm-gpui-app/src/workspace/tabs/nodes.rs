@@ -596,14 +596,12 @@ impl WorkspaceApp {
                     if nodes_to_close.is_empty() {
                         nodes_to_close.push(node_id.clone());
                     }
-                    // Tauri's connection_status_changed(disconnected) handler
-                    // closes tabs by root and affected child node ids; native
-                    // must do the same for node-scoped SFTP/IDE/forwards tabs,
-                    // not only for terminal panes.
+                    // A transport disconnect is not a shell exit. Retain terminal
+                    // identities for reconnect; explicit node removal owns tab closure.
                     for affected_node_id in nodes_to_close {
                         self.close_tabs_for_node(
                             &affected_node_id,
-                            !self.settings_store.settings().terminal.close_on_exit,
+                            true,
                             window,
                             cx,
                         );
@@ -720,12 +718,12 @@ impl WorkspaceApp {
                         if nodes_to_close.is_empty() {
                             nodes_to_close.push(node_id.clone());
                         }
-                        // Internal node:state disconnects are the native form
-                        // of the same Tauri terminal cleanup boundary.
+                        // Runtime disconnect notifications can precede reconnect.
+                        // Only explicit user closure may remove these terminals.
                         for affected_node_id in nodes_to_close {
                             self.close_tabs_for_node(
                                 &affected_node_id,
-                                !self.settings_store.settings().terminal.close_on_exit,
+                                true,
                                 window,
                                 cx,
                             );

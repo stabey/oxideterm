@@ -421,22 +421,24 @@ impl SshPtyCore {
                         if !self.parser_state.flush_recording() {
                             break;
                         }
-                        if self.handle.as_ref().is_some_and(SshPtyHandle::shell_started) {
+                        let shell_started = self
+                            .handle
+                            .as_ref()
+                            .is_some_and(SshPtyHandle::shell_started);
+                        let shell_exit = self.handle.as_ref().and_then(SshPtyHandle::shell_exit);
+                        let exit_code = shell_exit.and_then(|exit| exit.exit_code());
+                        if shell_started && shell_exit.is_some() {
                             self.parser_state.close_recording();
                         } else {
                             self.parser_state.interrupt_recording();
                         }
-                        self.lifecycle = TerminalLifecycle::Exited(None);
+                        self.lifecycle = TerminalLifecycle::Exited(exit_code);
                         self.parser_state.transport_running = false;
                         self.parser_state.tmux_display.reset();
-                        let event = if self
-                            .handle
-                            .as_ref()
-                            .is_some_and(SshPtyHandle::shell_started)
-                        {
-                            TerminalEvent::ChildExited(None)
-                        } else {
-                            TerminalEvent::StartupFailed
+                        let event = match (shell_started, shell_exit) {
+                            (false, _) => TerminalEvent::StartupFailed,
+                            (true, Some(_)) => TerminalEvent::ChildExited(exit_code),
+                            (true, None) => TerminalEvent::ConnectionLost,
                         };
                         self.parser_state.pending_events.push(event);
                         report.mark_changed();

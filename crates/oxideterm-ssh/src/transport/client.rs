@@ -1589,6 +1589,8 @@ impl SshTransportClient {
         };
         let shell_started = Arc::new(AtomicBool::new(false));
         let task_shell_started = shell_started.clone();
+        let shell_exit = Arc::new(RwLock::new(None));
+        let task_shell_exit = shell_exit.clone();
         let mut deferred_request_config = deferred_pty.then_some(request_config);
 
         let audit = pooled.audit.clone();
@@ -1757,7 +1759,17 @@ impl SshTransportClient {
                                     pending_output = Some(Box::pin(output_tx.send(bytes)));
                                 }
                             }
-                            None | Some(ChannelMsg::Eof | ChannelMsg::Close) => {
+                            Some(ChannelMsg::ExitStatus { exit_status }) => {
+                                *task_shell_exit.write() = Some(SshShellExit::Status(exit_status));
+                            }
+                            Some(ChannelMsg::ExitSignal { .. }) => {
+                                *task_shell_exit.write() = Some(SshShellExit::Signal);
+                            }
+                            // EOF ends output only. The server can still report
+                            // process exit before closing the channel; losing that
+                            // distinction would make a broken link look like `exit`.
+                            Some(ChannelMsg::Eof) => {}
+                            None | Some(ChannelMsg::Close) => {
                                 remote_closed = true;
                                 if let Some(bytes) = output_batcher.take_flush() {
                                     pending_output = Some(Box::pin(output_tx.send(bytes)));
@@ -1789,6 +1801,7 @@ impl SshTransportClient {
             output_rx,
             auth_banners,
             shell_started,
+            shell_exit,
             ssh_connection,
             registry_release,
         })
