@@ -9,6 +9,35 @@ use zeroize::Zeroizing;
 use super::{SshConnectionWorkerResult, kbi_dialog::NativeSshPromptSender};
 use crate::workspace::{TerminalNoticeVariant, WorkspaceApp};
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(in crate::workspace) struct SavedAuthSaveTarget {
+    connection_id: String,
+    host: String,
+    port: u16,
+    username: String,
+    updated_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+impl SavedAuthSaveTarget {
+    pub(super) fn new(connection: &SavedConnection) -> Self {
+        Self {
+            connection_id: connection.id.clone(),
+            host: connection.host.clone(),
+            port: connection.port,
+            username: connection.username.clone(),
+            updated_at: connection.updated_at,
+        }
+    }
+
+    fn is_current(&self, connection: &SavedConnection) -> bool {
+        self.connection_id == connection.id
+            && self.host == connection.host
+            && self.port == connection.port
+            && self.username == connection.username
+            && self.updated_at == connection.updated_at
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(in crate::workspace) enum SavedPasswordLoadError {
     NotFound,
@@ -105,6 +134,108 @@ impl SavedPasswordTarget {
 }
 
 impl WorkspaceApp {
+    pub(in crate::workspace) fn mark_saved_connection_used_for_node(
+        &mut self,
+        node_id: &NodeId,
+        connection_id: &str,
+    ) {
+        let refresh_consent = self
+            .ssh_nodes
+            .get(node_id)
+            .and_then(|node| node.pending_auth_save_target.as_ref())
+            .zip(self.connection_store.get(connection_id))
+            .is_some_and(|(target, connection)| target.is_current(connection));
+        if matches!(self.connection_store.mark_used(connection_id), Ok(true))
+            && refresh_consent
+            && let Some(connection) = self.connection_store.get(connection_id)
+            && let Some(node) = self.ssh_nodes.get_mut(node_id)
+        {
+            // Recency touches change updated_at; preserve consent only after checking the previous record.
+            node.pending_auth_save_target = Some(SavedAuthSaveTarget::new(connection));
+        }
+    }
+
+    pub(in crate::workspace) fn arm_saved_auth_save(
+        &mut self,
+        node_id: &NodeId,
+        target: Option<SavedAuthSaveTarget>,
+    ) {
+        if let Some(target) = target
+            && let Some(node) = self.ssh_nodes.get_mut(node_id)
+            && node.readiness != oxideterm_ssh::NodeReadiness::Ready
+        {
+            // The node retains consent metadata; its runtime remains the only credential owner.
+            node.pending_auth_save_target = Some(target);
+        }
+    }
+
+    pub(super) fn save_confirmed_connection_auth(
+        &mut self,
+        node_id: NodeId,
+        configured_credentials_confirmed: bool,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(target) = self
+            .ssh_nodes
+            .get_mut(&node_id)
+            .and_then(|node| node.pending_auth_save_target.take())
+        else {
+            return;
+        };
+        if !configured_credentials_confirmed
+            || !self
+                .connection_store
+                .get(&target.connection_id)
+                .is_some_and(|connection| target.is_current(connection))
+        {
+            return;
+        }
+        let Some(snapshot) = self.node_router.node_runtime_snapshot(&node_id) else {
+            return;
+        };
+        if snapshot.config.host != target.host
+            || snapshot.config.port != target.port
+            || snapshot.config.username != target.username
+        {
+            return;
+        }
+        let mut form = super::ssh_flow::form_from_runtime_config(
+            oxideterm_ssh::SshConfig {
+                auth: snapshot.config.auth,
+                ..Default::default()
+            },
+            None,
+            String::new(),
+        );
+        form.save_password = true;
+        // Move the short-lived runtime projection into protected persistence; the draft zeroizes on drop.
+        let auth = oxideterm_connections::saved_auth_from_draft(
+            crate::workspace::session_manager::auth_draft_from_form(&mut form, true),
+        );
+        if matches!(
+            self.connection_store
+                .set_connection_auth(&target.connection_id, auth),
+            Ok(true)
+        ) {
+            self.queue_cloud_sync_dirty_refresh(cx);
+            self.push_command_palette_toast(
+                self.i18n.t("ssh.form.credentials_saved"),
+                None,
+                TerminalNoticeVariant::Success,
+                cx,
+            );
+        } else {
+            tracing::warn!("Unable to save confirmed SSH authentication information");
+            self.push_command_palette_toast(
+                self.i18n.t("ssh.form.save_credentials_failed"),
+                None,
+                TerminalNoticeVariant::Error,
+                cx,
+            );
+        }
+        cx.notify();
+    }
+
     pub(super) fn open_password_prompt(
         &mut self,
         node_id: Option<NodeId>,

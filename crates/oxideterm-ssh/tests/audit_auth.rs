@@ -379,9 +379,16 @@ struct PasswordPrompt {
     answer: Option<&'static str>,
     interactive_answer: Option<&'static str>,
     saved: Arc<std::sync::Mutex<Vec<(String, u16, String, Zeroizing<String>)>>>,
+    completed: std::sync::Mutex<Vec<bool>>,
 }
 
 impl oxideterm_ssh::SshPromptHandler for PasswordPrompt {
+    fn authentication_completed(&self, configured_credentials_confirmed: bool) {
+        self.completed
+            .lock()
+            .unwrap()
+            .push(configured_credentials_confirmed);
+    }
     fn keyboard_interactive(
         &self,
         _: oxideterm_ssh::KeyboardInteractivePromptRequest,
@@ -438,6 +445,50 @@ impl oxideterm_ssh::SshPromptHandler for PasswordPrompt {
                 on_authenticated,
             })
         })
+    }
+}
+
+#[tokio::test]
+async fn configured_credentials_are_confirmed_only_when_the_server_accepts_them() {
+    for (password, username, authenticated, expected_receipts) in [
+        ("fixture-auth-secret", "audit-user", true, vec![true]),
+        ("incorrect-auth-secret", "audit-user", false, vec![]),
+        (
+            "fixture-auth-secret",
+            "password-fallback-user",
+            true,
+            vec![true],
+        ),
+        (
+            "incorrect-auth-secret",
+            "otp-fallback-user",
+            true,
+            vec![false],
+        ),
+    ] {
+        let (mut config, _, server, _) = start_peer(username != "audit-user").await;
+        config.username = username.into();
+        config.auth = oxideterm_ssh::AuthMethod::password(password);
+        let prompt = Arc::new(PasswordPrompt {
+            interactive_answer: Some("fixture-otp-secret"),
+            ..Default::default()
+        });
+        let result = tokio::time::timeout(
+            Duration::from_secs(5),
+            SshTransportClient::new(config)
+                .with_prompt_handler(prompt.clone())
+                .test_connection(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(result.is_ok(), authenticated, "username={username}");
+        assert_eq!(
+            *prompt.completed.lock().unwrap(),
+            expected_receipts,
+            "username={username}"
+        );
+        server.abort();
+        let _ = server.await;
     }
 }
 

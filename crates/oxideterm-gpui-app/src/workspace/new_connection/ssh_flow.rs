@@ -66,6 +66,8 @@ mod connect;
 mod conversion;
 mod save;
 
+pub(super) use conversion::form_from_runtime_config;
+
 use conversion::*;
 pub(in crate::workspace) use save::mosh_options_from_profile;
 
@@ -140,7 +142,10 @@ pub(in crate::workspace) enum SshConnectionIntent {
     TestStandaloneSftp,
     Connect(SshTerminalConnectionOptions),
     ConnectTemporary,
-    ConnectSaved(String),
+    ConnectSaved {
+        id: String,
+        auth_save_target: Option<super::password_prompt::SavedAuthSaveTarget>,
+    },
     DrillDown {
         parent_id: NodeId,
         saved_connection_id: Option<String>,
@@ -256,6 +261,10 @@ pub(in crate::workspace) enum SshConnectionWorkerResult {
         target: super::password_prompt::SavedPasswordTarget,
         password: zeroize::Zeroizing<String>,
     },
+    AuthenticationCompleted {
+        node_id: NodeId,
+        configured_credentials_confirmed: bool,
+    },
 }
 
 #[derive(Clone)]
@@ -297,6 +306,17 @@ impl NativeSshPromptHandler {
 }
 
 impl SshPromptHandler for NativeSshPromptHandler {
+    fn authentication_completed(&self, configured_credentials_confirmed: bool) {
+        if let Some(node_id) = &self.node_id {
+            let _ = self
+                .tx
+                .send(SshConnectionWorkerResult::AuthenticationCompleted {
+                    node_id: node_id.clone(),
+                    configured_credentials_confirmed,
+                });
+        }
+    }
+
     fn password(
         &self,
         prompt: oxideterm_ssh::SshPasswordPrompt,

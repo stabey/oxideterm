@@ -592,6 +592,11 @@ async fn authenticate_with_options(
     )
     .await;
     operation.result(&result);
+    if let Ok(configured_credentials_confirmed) = &result
+        && let Some(handler) = prompt_handler
+    {
+        handler.authentication_completed(*configured_credentials_confirmed);
+    }
     if result.is_ok()
         && let Some(SshPasswordResponse {
             password,
@@ -600,7 +605,7 @@ async fn authenticate_with_options(
     {
         save(password);
     }
-    result
+    result.map(|_| ())
 }
 
 async fn authenticate_flow(
@@ -612,7 +617,7 @@ async fn authenticate_flow(
     options: AuthenticationOptions,
     audit: &mut AuthenticationAudit,
     password_to_save: &mut Option<SshPasswordResponse>,
-) -> Result<(), SshTransportError> {
+) -> Result<bool, SshTransportError> {
     tracing::debug!(
         auth_method = auth_method_label(&config.auth),
         "SSH authentication flow starting"
@@ -621,7 +626,7 @@ async fn authenticate_flow(
         && result.success()
     {
         tracing::debug!("SSH none-auth probe accepted by server");
-        return Ok(());
+        return Ok(false);
     }
 
     let auth = match &config.auth {
@@ -640,7 +645,7 @@ async fn authenticate_flow(
             )
             .await?
             {
-                KerberosAuthenticationOutcome::Authenticated => return Ok(()),
+                KerberosAuthenticationOutcome::Authenticated => return Ok(false),
                 KerberosAuthenticationOutcome::Fallback => {
                     if let Some(reporter) = connection_progress {
                         reporter.report(ConnectionTraceStage::FallbackAuthentication);
@@ -706,7 +711,7 @@ async fn authenticate_flow(
                     *password_to_save = None;
                 }
                 tracing::debug!("SSH password keyboard-interactive fallback succeeded");
-                return Ok(());
+                return Ok(password_confirmed && !prompt);
             }
             result
         }
@@ -768,7 +773,7 @@ async fn authenticate_flow(
             if let Some(result) = agent_attempt.result.as_ref() {
                 log_auth_result("agent", result);
                 if result.success() {
-                    return Ok(());
+                    return Ok(true);
                 }
             }
 
@@ -788,7 +793,7 @@ async fn authenticate_flow(
                     log_auth_result("default-publickey", &result);
                     if result.success() || !server_allows_more_publickey_attempts(&result) {
                         return if result.success() {
-                            Ok(())
+                            Ok(true)
                         } else {
                             Err(SshTransportError::AuthenticationFailed(
                                 authentication_failure_message(&result),
@@ -850,13 +855,13 @@ async fn authenticate_flow(
 
     if result.success() {
         tracing::debug!("SSH authentication flow succeeded");
-        Ok(())
+        Ok(!matches!(auth, AuthMethod::Password { prompt: true, .. }))
     } else if options.interactive_kbi_chain
         && try_keyboard_interactive_chain(handle, &config.username, &result, prompt_handler, audit)
             .await?
     {
         tracing::debug!("SSH chained keyboard-interactive authentication succeeded");
-        Ok(())
+        Ok(!matches!(auth, AuthMethod::Password { prompt: true, .. }))
     } else {
         tracing::debug!("SSH authentication flow failed");
         Err(SshTransportError::AuthenticationFailed(

@@ -879,7 +879,7 @@ pub(super) fn proxy_hop_draft_from_form(
     }
 }
 
-pub(super) fn auth_draft_from_form(
+pub(in crate::workspace) fn auth_draft_from_form(
     form: &mut NewConnectionForm,
     persist_password_draft: bool,
 ) -> ConnectionAuthDraft {

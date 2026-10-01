@@ -392,6 +392,45 @@ impl ConnectionStore {
         audit_result
     }
 
+    /// Replaces only the chosen authentication policy after its credentials have been confirmed.
+    pub fn set_connection_auth(&mut self, id: &str, auth: SavedAuth) -> Result<bool> {
+        let audit = oxideterm_audit::AuditOperation::begin(
+            oxideterm_audit::AuditCategory::Configuration,
+            "credential_set",
+            Some(id),
+            None,
+        );
+        let audit_result = (|| {
+            let Some(connection) = self.get(id) else {
+                return Ok(false);
+            };
+            let old_keychain_ids = collect_connection_keychain_ids(connection);
+            let previous_credentials =
+                self.stored_credential_targets(&CredentialOwner::Connection(id.to_string()));
+            let auth = self.materialize_auth(auth, Some(&connection.auth))?;
+            let connection = self
+                .data
+                .connections
+                .iter_mut()
+                .find(|connection| connection.id == id)
+                .expect("saved connection checked above");
+            connection.auth = auth;
+            connection.updated_at = Some(Utc::now());
+            let next_keychain_ids = collect_connection_keychain_ids(connection);
+            self.record_cleared_credentials(previous_credentials);
+            self.save()?;
+            for keychain_id in old_keychain_ids
+                .iter()
+                .filter(|keychain_id| !next_keychain_ids.contains(*keychain_id))
+            {
+                let _ = self.keychain.delete(keychain_id);
+            }
+            Ok(true)
+        })();
+        audit.changed(&audit_result);
+        audit_result
+    }
+
     /// Stores a new SSH credential in the selected protected slot without touching recency.
     pub fn store_connection_credential(
         &mut self,

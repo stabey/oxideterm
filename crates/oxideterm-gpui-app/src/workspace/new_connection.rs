@@ -26,6 +26,7 @@ pub(super) use form_state::{
 };
 pub(super) use host_key_dialog::HostKeyChallenge;
 pub(super) use kbi_dialog::KeyboardInteractiveChallenge;
+pub(in crate::workspace) use password_prompt::SavedAuthSaveTarget;
 pub(super) use ssh_flow::{
     MoshConnectionOptions, NativeSshPromptHandler, PendingStandaloneSftpPairLaunch,
     SshConnectionIntent, SshConnectionWorkerResult, SshTerminalConnectionOptions,

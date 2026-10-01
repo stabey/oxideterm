@@ -467,6 +467,9 @@ pub enum SshPromptError {
 }
 
 pub trait SshPromptHandler: Send + Sync {
+    /// A successful login may bypass or replace configured credentials; persistence needs this distinction.
+    fn authentication_completed(&self, _configured_credentials_confirmed: bool) {}
+
     fn password(
         &self,
         prompt: SshPasswordPrompt,
