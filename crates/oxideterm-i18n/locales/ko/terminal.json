@@ -156,10 +156,18 @@
       "player_empty": "No playback output yet"
     },
     "session_log": {
+      "save_to_file": "출력을 파일로 저장…",
+      "choose_save_pane": "출력을 저장할 창 선택",
+      "choose_stop_pane": "저장을 중지할 창 선택",
+      "saving_badge": "저장 중",
+      "paused_badge": "일시 정지됨",
+      "current_pane": "현재 창",
+      "pane_picker_hint": "마우스 또는 ↑ ↓로 미리 보기 · Enter로 선택 · Esc로 취소",
       "title": "세션 로그",
       "started": "세션 로그를 시작했습니다",
       "start_failed": "세션 로그를 시작할 수 없습니다",
       "write_failed": "파일에 쓸 수 없어 세션 로그가 중지되었습니다",
+      "overloaded": "출력이 쓰기 버퍼 한도를 초과하여 세션 로깅이 중지되었습니다. 출력이 줄어들면 로깅을 다시 시작하세요.",
       "stopped": "세션 로그를 저장했습니다",
       "stop_failed": "세션 로그를 완료할 수 없습니다",
       "start": "세션 로그 시작",

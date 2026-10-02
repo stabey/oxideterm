@@ -14,6 +14,22 @@ impl TerminalPane {
     }
 
     pub fn start_session_log(&mut self, cx: &mut Context<Self>) -> std::result::Result<(), String> {
+        self.start_session_log_with_path(None, cx)
+    }
+
+    pub fn start_session_log_at_path(
+        &mut self,
+        path: std::path::PathBuf,
+        cx: &mut Context<Self>,
+    ) -> std::result::Result<(), String> {
+        self.start_session_log_with_path(Some(path), cx)
+    }
+
+    fn start_session_log_with_path(
+        &mut self,
+        path: Option<std::path::PathBuf>,
+        cx: &mut Context<Self>,
+    ) -> std::result::Result<(), String> {
         let before = self.session_log_status().state;
         let context = self.terminal.lock().audit_context();
         let audit = oxideterm_audit::AuditOperation::in_request(
@@ -25,6 +41,10 @@ impl TerminalPane {
         let result = (|| {
             if let Some(log) = self.session_log.as_ref() {
                 if !log.status().failed {
+                    if path.is_some() {
+                        // A pending file dialog cannot replace a log started by another action.
+                        return Err("terminal session log is already active".to_string());
+                    }
                     return Ok(());
                 }
                 // A completed writer error may be replaced without touching the terminal session.
@@ -37,10 +57,18 @@ impl TerminalPane {
                 .session_log_options
                 .clone()
                 .ok_or_else(|| "terminal session log directory is unavailable".to_string())?;
-            self.session_log = Some(TerminalSessionLog::start(options).map_err(|_| {
+            // Another consumer may already have queued output. Deliver it before this log starts.
+            self.tick(cx);
+            let log = match path {
+                Some(path) => TerminalSessionLog::start_at_path(path, options),
+                None => TerminalSessionLog::start(options),
+            };
+            let log = log.map_err(|_| {
                 // File-system details stay out of notices because paths may identify sensitive hosts.
                 "could not start terminal session log".to_string()
-            })?);
+            })?;
+            log.wake_on_failure(self.scheduler_wake_sender.clone());
+            self.session_log = Some(log);
             self.sync_terminal_output_events_enabled();
             cx.emit(TerminalPaneEvent::SessionLogStatusChanged);
             cx.notify();
@@ -144,6 +172,8 @@ impl TerminalPane {
             None,
         );
         let result = (|| {
+            // Preserve output already accepted by the terminal before removing this consumer.
+            self.tick(cx);
             let Some(log) = self.session_log.take() else {
                 return Ok(None);
             };
@@ -168,5 +198,30 @@ impl TerminalPane {
             None,
         );
         result
+    }
+
+    fn handle_session_log_failure(&mut self, overloaded: bool, cx: &mut Context<Self>) {
+        // Failure drops only this pane's file sink and leaves the terminal session alive.
+        self.last_session_log_path = self.session_log.as_ref().and_then(|log| log.status().path);
+        self.session_log.take();
+        self.sync_terminal_output_events_enabled();
+        cx.emit(TerminalPaneEvent::SessionLogStatusChanged);
+        let message = if overloaded {
+            &self.preferences.session_log_labels.overloaded
+        } else {
+            &self.preferences.session_log_labels.write_failed
+        };
+        if let Some(sink) = &self.preferences.notice_sink
+            && !message.is_empty()
+        {
+            sink(TerminalNotice {
+                title: message.clone(),
+                description: None,
+                status_text: None,
+                progress: None,
+                variant: TerminalNoticeVariant::Error,
+            });
+        }
+        cx.notify();
     }
 }

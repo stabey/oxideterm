@@ -156,10 +156,18 @@
       "player_empty": "尚無回放輸出"
     },
     "session_log": {
+      "save_to_file": "儲存輸出至檔案…",
+      "choose_save_pane": "選擇要儲存輸出的窗格",
+      "choose_stop_pane": "選擇要停止儲存的窗格",
+      "saving_badge": "儲存中",
+      "paused_badge": "已暫停",
+      "current_pane": "目前窗格",
+      "pane_picker_hint": "懸停或 ↑ ↓ 預覽 · Enter 選擇 · Esc 取消",
       "title": "工作階段日誌",
       "started": "工作階段日誌已開始",
       "start_failed": "無法開始工作階段日誌",
       "write_failed": "無法寫入檔案，工作階段日誌已停止",
+      "overloaded": "終端輸出超過日誌寫入緩衝上限，工作階段日誌已停止。請在輸出減緩後重新開始記錄。",
       "stopped": "工作階段日誌已儲存",
       "stop_failed": "無法完成工作階段日誌",
       "start": "開始工作階段日誌",

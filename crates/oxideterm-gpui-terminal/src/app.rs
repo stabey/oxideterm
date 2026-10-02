@@ -1171,6 +1171,9 @@ impl TerminalPane {
         } else {
             None
         };
+        if let Some(log) = &session_log {
+            log.wake_on_failure(scheduler_wake_sender.clone());
+        }
 
         let mut pane = Self {
             terminal,
@@ -3065,6 +3068,13 @@ impl TerminalPane {
         for event in events {
             event_effect.combine(self.handle_terminal_event(event, cx));
         }
+        if self
+            .session_log
+            .as_ref()
+            .is_some_and(TerminalSessionLog::has_failed)
+        {
+            self.handle_session_log_failure(false, cx);
+        }
 
         let cleared_command_mark_selection = self.clear_command_mark_selection_for_tui_mode(mode);
         let cleared_privilege_prompt_hint = if mode.contains(TermMode::ALT_SCREEN) {
@@ -3407,28 +3417,15 @@ impl TerminalPane {
                 if let Some(recorder) = self.recorder.as_mut() {
                     recorder.record_output(&bytes);
                 }
-                let session_log_failed = self
+                let session_log_error = self
                     .session_log
                     .as_mut()
-                    .is_some_and(|log| log.write_output(bytes).is_err());
-                if session_log_failed {
-                    // Failure drops only this pane's file sink and leaves the terminal session alive.
-                    self.last_session_log_path =
-                        self.session_log.as_ref().and_then(|log| log.status().path);
-                    self.session_log.take();
-                    self.sync_terminal_output_events_enabled();
-                    cx.emit(TerminalPaneEvent::SessionLogStatusChanged);
-                    if let Some(sink) = &self.preferences.notice_sink
-                        && !self.preferences.session_log_labels.write_failed.is_empty()
-                    {
-                        sink(TerminalNotice {
-                            title: self.preferences.session_log_labels.write_failed.clone(),
-                            description: None,
-                            status_text: None,
-                            progress: None,
-                            variant: TerminalNoticeVariant::Error,
-                        });
-                    }
+                    .and_then(|log| log.write_output(bytes).err());
+                if let Some(error) = session_log_error {
+                    self.handle_session_log_failure(
+                        error.kind() == std::io::ErrorKind::WouldBlock,
+                        cx,
+                    );
                 }
                 TerminalEventEffect::default()
             }

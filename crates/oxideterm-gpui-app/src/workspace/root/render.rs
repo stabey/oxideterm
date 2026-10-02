@@ -422,6 +422,11 @@ impl WorkspaceApp {
                     cx.stop_propagation();
                     return;
                 }
+                if this.capture_session_log_menu_key(event, window, cx) {
+                    window.prevent_default();
+                    cx.stop_propagation();
+                    return;
+                }
                 if this.active_sftp_editor_owns_key(event.keystroke.key.as_str(), cx)
                     || this.quick_command_text_editor_focused(window, cx)
                     || this
@@ -1295,6 +1300,9 @@ impl WorkspaceApp {
                 root.child(preview)
             })
             .when_some(self.render_tab_context_menu(window, cx), |root, menu| {
+                root.child(menu)
+            })
+            .when_some(self.render_session_log_menu(window, cx), |root, menu| {
                 root.child(menu)
             })
             .when_some(self.render_terminal_cast_player(cx), |root, player| {

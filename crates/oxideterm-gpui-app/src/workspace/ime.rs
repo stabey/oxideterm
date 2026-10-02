@@ -1359,6 +1359,12 @@ impl WorkspaceApp {
         window_id: gpui::WindowId,
         cx: &App,
     ) -> Option<WorkspaceImeTarget> {
+        if self.session_log_menu_owns_window(window_id)
+            && !self.app_lock.locked
+            && self.active_window_modal_owner(cx).is_none()
+        {
+            return None;
+        }
         let target = self.active_ime_target(cx)?;
         if let WorkspaceImeTarget::Forwards(page, _) = target {
             let owner = self

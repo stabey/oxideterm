@@ -156,10 +156,18 @@
       "player_empty": "No playback output yet"
     },
     "session_log": {
+      "save_to_file": "Lưu đầu ra vào tệp…",
+      "choose_save_pane": "Chọn ngăn để lưu đầu ra",
+      "choose_stop_pane": "Chọn ngăn để dừng lưu",
+      "saving_badge": "Đang lưu",
+      "paused_badge": "Đã tạm dừng",
+      "current_pane": "Hiện tại",
+      "pane_picker_hint": "Di chuột hoặc ↑ ↓ để xem · Enter để chọn · Esc để hủy",
       "title": "Nhật ký phiên",
       "started": "Đã bắt đầu nhật ký phiên",
       "start_failed": "Không thể bắt đầu nhật ký phiên",
       "write_failed": "Nhật ký phiên đã dừng vì không thể ghi tệp",
+      "overloaded": "Việc ghi nhật ký phiên đã dừng vì đầu ra vượt quá bộ đệm ghi. Hãy bắt đầu ghi lại khi đầu ra chậm lại.",
       "stopped": "Đã lưu nhật ký phiên",
       "stop_failed": "Không thể hoàn tất nhật ký phiên",
       "start": "Bắt đầu nhật ký phiên",

@@ -244,10 +244,18 @@
       "player_empty": "No playback output yet"
     },
     "session_log": {
+      "save_to_file": "Save Output to File…",
+      "choose_save_pane": "Choose a pane to save",
+      "choose_stop_pane": "Choose a pane to stop saving",
+      "saving_badge": "Saving",
+      "paused_badge": "Paused",
+      "current_pane": "Current",
+      "pane_picker_hint": "Hover or ↑ ↓ to preview · Enter to select · Esc to cancel",
       "title": "Session log",
       "started": "Session logging started",
       "start_failed": "Could not start session logging",
       "write_failed": "Session logging stopped because the file could not be written",
+      "overloaded": "Session logging stopped because output exceeded the write buffer. Restart logging when output slows down.",
       "stopped": "Session log saved",
       "stop_failed": "Could not finish the session log",
       "start": "Start Session Log",

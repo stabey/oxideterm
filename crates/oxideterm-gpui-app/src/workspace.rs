@@ -69,6 +69,7 @@ mod terminal_cwd;
 mod terminal_entity;
 mod terminal_git;
 mod terminal_project;
+mod terminal_session_log;
 mod terminal_sync_groups;
 mod terminal_triggers_runtime;
 mod version_migration;
@@ -766,6 +767,7 @@ pub(crate) struct WorkspaceApp {
     _tab_host_subscription: Subscription,
     search: actions::TerminalSearchState,
     terminal_recording_menu_open: bool,
+    terminal_session_log_menu: Option<terminal_session_log::SessionLogMenu>,
     terminal_highlight_popover_open: bool,
     // Settings keep the source pane stable while editing session-only trigger overrides.
     terminal_trigger_settings_pane: Option<PaneId>,

@@ -913,6 +913,7 @@ impl WorkspaceApp {
                     .child(self.terminal_pane_label(pane_id, cx)),
             )
             .child(format!("#{}", pane_id.0))
+            .children(self.render_session_log_badge(tab_id, pane_id, cx))
             .child(self.pane_header_action(
                 LucideIcon::AppWindow,
                 "tabbar.move_pane_to_tab",
@@ -1197,6 +1198,7 @@ impl WorkspaceApp {
                             .is_some_and(|search| search.visible),
                         |frame| frame.child(self.render_search_bar(*pane_id, cx)),
                     )
+                    .children(self.render_session_log_preview(*pane_id, window))
                     .into_any_element()
             }
             PaneNode::Group {

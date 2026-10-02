@@ -4,7 +4,8 @@ use super::*;
 use oxideterm_gpui_ui::button::ButtonVariant;
 use oxideterm_gpui_ui::context_menu::{
     ContextMenuItemKind, context_menu_content, context_menu_event_boundary, context_menu_item,
-    context_menu_separator,
+    context_menu_item_height_estimate, context_menu_separator,
+    context_menu_separator_height_estimate,
 };
 use oxideterm_gpui_ui::modal::overlay_content_boundary;
 
@@ -719,6 +720,9 @@ impl WorkspaceApp {
         cx: &mut Context<Self>,
     ) {
         self.release_settings_select_window(window_id);
+        if self.session_log_menu_owns_window(window_id) {
+            self.terminal_session_log_menu = None;
+        }
         let dismissed_document_dialog = self.ai_entity.update(cx, |ai, cx| {
             ai.dismiss_knowledge_document_dialog_for_window(window_id, cx)
         });
@@ -1324,6 +1328,7 @@ impl WorkspaceApp {
             Vec::new()
         };
         self.tab_by_id(menu.tab_id, cx)?;
+        let (can_save_output, can_stop_output) = self.tab_session_log_actions(menu.tab_id, cx);
         let viewport = window.viewport_size();
         let mut menu_height = if renamable {
             TAB_CONTEXT_MENU_RENAME_HEIGHT
@@ -1332,6 +1337,11 @@ impl WorkspaceApp {
         };
         if can_split_into_active {
             menu_height += TAB_CONTEXT_MENU_SPLIT_HEIGHT;
+        }
+        if can_save_output || can_stop_output {
+            menu_height += context_menu_item_height_estimate(&self.tokens)
+                * (u8::from(can_save_output) + u8::from(can_stop_output)) as f32
+                + context_menu_separator_height_estimate(&self.tokens);
         }
         menu_height += merge_targets.len() as f32 * TAB_CONTEXT_MENU_SPLIT_HEIGHT;
         menu_height = menu_height.min(f32::from(viewport.height) - TAB_CONTEXT_MENU_MARGIN * 2.0);
@@ -1374,6 +1384,48 @@ impl WorkspaceApp {
                                 }),
                             ),
                         )
+                    })
+                    .when(can_save_output || can_stop_output, |content| {
+                        content
+                            .child(context_menu_separator(&self.tokens))
+                            .children(
+                                [
+                                    (
+                                        can_save_output,
+                                        terminal_session_log::SessionLogMenuMode::Save,
+                                        "terminal.session_log.save_to_file",
+                                    ),
+                                    (
+                                        can_stop_output,
+                                        terminal_session_log::SessionLogMenuMode::Stop,
+                                        "terminal.session_log.stop",
+                                    ),
+                                ]
+                                .into_iter()
+                                .filter(|(show, _, _)| *show)
+                                .map(|(_, mode, key)| {
+                                    context_menu_item(
+                                        &self.tokens,
+                                        self.i18n.t(key),
+                                        ContextMenuItemKind::Plain,
+                                        false,
+                                        false,
+                                    )
+                                    .on_mouse_down(
+                                        MouseButton::Left,
+                                        cx.listener(move |this, _, window, cx| {
+                                            this.begin_session_log_menu(
+                                                menu.tab_id,
+                                                mode,
+                                                gpui::point(px(menu.x), px(menu.y)),
+                                                window,
+                                                cx,
+                                            );
+                                            cx.stop_propagation();
+                                        }),
+                                    )
+                                }),
+                            )
                     })
                     .when(can_split_into_active, |content| {
                         content
@@ -1644,6 +1696,7 @@ impl WorkspaceApp {
         .track_focus(&self.focus_handle)
         .when_some(entry_handoff, |root, handoff| root.child(handoff))
         // Detached tabs use their own native window root as the modal portal.
+        .children(self.render_session_log_menu(window, cx))
         .children(tab_window_modals)
         .when(self.mermaid_zoom.is_some(), |root| {
             root.child(self.render_mermaid_zoom_modal(window, cx))

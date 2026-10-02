@@ -156,10 +156,18 @@
       "player_empty": "No playback output yet"
     },
     "session_log": {
+      "save_to_file": "Salva output in un file…",
+      "choose_save_pane": "Scegli il riquadro da salvare",
+      "choose_stop_pane": "Scegli il riquadro di cui interrompere il salvataggio",
+      "saving_badge": "Salvataggio",
+      "paused_badge": "In pausa",
+      "current_pane": "Attuale",
+      "pane_picker_hint": "Passa il mouse o ↑ ↓: anteprima · Invio: scegli · Esc: annulla",
       "title": "Registro della sessione",
       "started": "Registrazione della sessione avviata",
       "start_failed": "Impossibile avviare il registro della sessione",
       "write_failed": "Il registro della sessione è stato arrestato perché il file non può essere scritto",
+      "overloaded": "La registrazione della sessione è stata interrotta perché l’output ha superato il buffer di scrittura. Riavviala quando l’output diminuisce.",
       "stopped": "Registro della sessione salvato",
       "stop_failed": "Impossibile completare il registro della sessione",
       "start": "Avvia registro sessione",

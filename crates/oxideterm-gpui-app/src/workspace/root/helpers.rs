@@ -1056,6 +1056,9 @@ impl WorkspaceApp {
         if self.dismiss_terminal_recording_menu() {
             changed = true;
         }
+        if self.terminal_session_log_menu.take().is_some() {
+            changed = true;
+        }
         if self.dismiss_terminal_highlight_popover() {
             changed = true;
         }

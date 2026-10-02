@@ -156,10 +156,18 @@
       "player_empty": "No playback output yet"
     },
     "session_log": {
+      "save_to_file": "出力をファイルに保存…",
+      "choose_save_pane": "出力を保存するペインを選択",
+      "choose_stop_pane": "保存を停止するペインを選択",
+      "saving_badge": "保存中",
+      "paused_badge": "一時停止中",
+      "current_pane": "現在",
+      "pane_picker_hint": "ホバーまたは ↑ ↓ で確認 · Enter で選択 · Esc でキャンセル",
       "title": "セッションログ",
       "started": "セッションログを開始しました",
       "start_failed": "セッションログを開始できませんでした",
       "write_failed": "ファイルに書き込めないため、セッションログを停止しました",
+      "overloaded": "出力が書き込みバッファの上限を超えたため、セッションログを停止しました。出力が落ち着いてから記録を再開してください。",
       "stopped": "セッションログを保存しました",
       "stop_failed": "セッションログを完了できませんでした",
       "start": "セッションログを開始",
