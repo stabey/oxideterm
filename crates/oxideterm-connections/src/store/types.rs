@@ -377,6 +377,8 @@ pub struct ConnectionOptions {
     pub x11_forwarding: ConnectionX11ForwardingOptions,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub post_connect_command: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub login_script: Vec<crate::LoginScriptStep>,
     /// Terminal protocol behavior is host-specific; absent values inherit the
     /// application defaults so existing saved connections remain compatible.
     #[serde(
@@ -1859,6 +1861,7 @@ pub struct SaveConnectionRequest {
     pub ssh_channel_strategy: SshChannelStrategy,
     pub x11_forwarding: ConnectionX11ForwardingOptions,
     pub post_connect_command: Option<String>,
+    pub login_script: Vec<crate::LoginScriptStep>,
     pub terminal: ConnectionTerminalOptions,
 }
 

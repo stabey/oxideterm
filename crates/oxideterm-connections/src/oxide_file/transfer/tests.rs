@@ -184,6 +184,7 @@ mod tests {
                 x11_forwarding: crate::ConnectionX11ForwardingOptions::default(),
                 dedicated_new_terminal_connection: false,
                 ssh_channel_strategy: crate::SshChannelStrategy::default(),
+                login_script: Vec::new(),
                 post_connect_command: None,
                 terminal: ConnectionTerminalOptions::default(),
             },
@@ -196,6 +197,49 @@ mod tests {
             tags: vec!["prod".to_string()],
             post_connect_command: None,
             privilege_credentials: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn login_script_archive_export_requires_credential_opt_in() {
+        let store = temp_store("login-script-export");
+        let mut connection = saved_connection("login-script", "Login script");
+        connection.auth = SavedAuth::Agent;
+        connection.options.login_script = vec![crate::LoginScriptStep {
+            expect: "Password:".into(),
+            send: "archive-test-response".into(),
+            is_regex: false,
+            optional: true,
+        }];
+        for (include_passwords, expected) in [
+            (false, vec![]),
+            (true, vec![("Password:", "archive-test-response", false, true)]),
+        ] {
+            let exported = export_connection(
+                &store,
+                &connection,
+                &OxideExportOptions {
+                    include_passwords,
+                    ..OxideExportOptions::default()
+                },
+                Vec::new(),
+            )
+            .unwrap();
+            assert_eq!(
+                exported
+                    .options
+                    .login_script
+                    .iter()
+                    .map(|step| (
+                        step.expect.expose_secret(),
+                        step.send.expose_secret(),
+                        step.is_regex,
+                        step.optional,
+                    ))
+                    .collect::<Vec<_>>(),
+                expected,
+                "include_passwords={include_passwords}",
+            );
         }
     }
 

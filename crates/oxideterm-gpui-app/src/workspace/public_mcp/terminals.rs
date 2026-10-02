@@ -425,7 +425,7 @@ impl WorkspaceApp {
                 });
                 match self.create_ssh_terminal_tab_for_existing_node(
                     &lease.node_id,
-                    None,
+                    Vec::new(),
                     title.clone(),
                     window,
                     cx,

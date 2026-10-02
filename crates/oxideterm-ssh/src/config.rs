@@ -132,6 +132,8 @@ pub struct SshConfig {
     pub x11_forwarding: Option<X11ForwardPolicy>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub post_connect_command: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub login_script: Vec<oxideterm_connections::LoginScriptStep>,
 }
 
 impl fmt::Debug for SshConfig {
@@ -626,6 +628,7 @@ impl Default for SshConfig {
             ssh_algorithms: SshAlgorithmPreferences::default(),
             x11_forwarding: None,
             post_connect_command: None,
+            login_script: Vec::new(),
         }
     }
 }

@@ -41,7 +41,7 @@ impl WorkspaceApp {
                 // NodeRouter retains the physical connection; this creates only a tab consumer.
                 match self.queue_ssh_terminal_tab_for_existing_node(
                     node_id,
-                    Some(command),
+                    vec![oxideterm_connections::LoginScriptStep::command(command)],
                     title,
                     window,
                     cx,

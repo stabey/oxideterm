@@ -27,6 +27,8 @@ oxideterm-terminal-triggers = { path = "../oxideterm-terminal-triggers" }
 oxideterm-tmux = { path = "../oxideterm-tmux" }
 oxideterm-trzsz = { path = "../oxideterm-trzsz" }
 polling.workspace = true
+regex.workspace = true
+vte.workspace = true
 serialport.workspace = true
 serde.workspace = true
 tokio.workspace = true

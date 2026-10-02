@@ -540,7 +540,7 @@ impl WorkspaceImeTarget {
                     } << 12)
                     | input.anchor_key()
             }
-            Self::NewConnection(field) => 2_000 + field as u64,
+            Self::NewConnection(field) => 2_000 + field.anchor_key(),
             Self::KeyboardInteractive(index) => 3_000 + index as u64,
         };
         TextInputAnchorId(id)
@@ -1922,9 +1922,11 @@ impl WorkspaceApp {
                 // y-to-line mapping tied to the shared textarea renderer.
                 px(input.textarea_line_height())
             }
-            WorkspaceImeTarget::NewConnection(NewConnectionField::Notes) => {
-                px(CONNECTION_NOTES_LINE_HEIGHT)
-            }
+            WorkspaceImeTarget::NewConnection(
+                NewConnectionField::Notes
+                | NewConnectionField::PostConnectCommand
+                | NewConnectionField::LoginScriptSend(_),
+            ) => px(CONNECTION_NOTES_LINE_HEIGHT),
             WorkspaceImeTarget::QuickCommand(QuickCommandInput::CommandText) => {
                 px(QUICK_COMMAND_TEXTAREA_LINE_HEIGHT)
             }
@@ -1961,9 +1963,11 @@ impl WorkspaceApp {
                 // inset before mapping y to a UTF-16 line.
                 px(8.0)
             }
-            WorkspaceImeTarget::NewConnection(NewConnectionField::Notes) => {
-                px(CONNECTION_NOTES_VERTICAL_PADDING)
-            }
+            WorkspaceImeTarget::NewConnection(
+                NewConnectionField::Notes
+                | NewConnectionField::PostConnectCommand
+                | NewConnectionField::LoginScriptSend(_),
+            ) => px(CONNECTION_NOTES_VERTICAL_PADDING),
             WorkspaceImeTarget::QuickCommand(QuickCommandInput::CommandText) => {
                 px(QUICK_COMMAND_TEXTAREA_VERTICAL_PADDING)
             }
@@ -3464,6 +3468,8 @@ fn new_connection_field_value(
         NewConnectionField::Group => &form.group,
         NewConnectionField::Notes => &form.notes,
         NewConnectionField::PostConnectCommand => &form.post_connect_command,
+        NewConnectionField::LoginScriptExpect(index) => &form.login_script[index].expect,
+        NewConnectionField::LoginScriptSend(index) => &form.login_script[index].send,
         NewConnectionField::ProxyCommand => &form.proxy_command,
         NewConnectionField::UpstreamProxyHost => &form.upstream_proxy_host,
         NewConnectionField::UpstreamProxyPort => &form.upstream_proxy_port,
@@ -3567,6 +3573,8 @@ fn connection_field_value_mut(
         NewConnectionField::Group => &mut form.group,
         NewConnectionField::Notes => &mut form.notes,
         NewConnectionField::PostConnectCommand => &mut form.post_connect_command,
+        NewConnectionField::LoginScriptExpect(index) => &mut form.login_script[index].expect,
+        NewConnectionField::LoginScriptSend(index) => &mut form.login_script[index].send,
         NewConnectionField::ProxyCommand => &mut form.proxy_command,
         NewConnectionField::UpstreamProxyHost => &mut form.upstream_proxy_host,
         NewConnectionField::UpstreamProxyPort => &mut form.upstream_proxy_port,
@@ -3738,7 +3746,11 @@ fn ime_target_accepts_newline(target: WorkspaceImeTarget) -> bool {
         WorkspaceImeTarget::ReadOnlyText(_) => true,
         WorkspaceImeTarget::Settings(input) => input.accepts_newline(),
         WorkspaceImeTarget::AiChatInput | WorkspaceImeTarget::AiMessageEdit => true,
-        WorkspaceImeTarget::NewConnection(NewConnectionField::Notes) => true,
+        WorkspaceImeTarget::NewConnection(
+            NewConnectionField::Notes
+            | NewConnectionField::PostConnectCommand
+            | NewConnectionField::LoginScriptSend(_),
+        ) => true,
         WorkspaceImeTarget::QuickCommand(QuickCommandInput::CommandText) => true,
         WorkspaceImeTarget::SessionManager(SessionManagerInput::OxideExportDescription) => true,
         _ => false,
@@ -4444,6 +4456,31 @@ mod tests {
         );
 
         assert_eq!(normalized.as_str(), "first\nsecond\nthird");
+    }
+
+    #[test]
+    fn ssh_post_connect_clipboard_preserves_shell_control_flow() {
+        for field in [
+            NewConnectionField::PostConnectCommand,
+            NewConnectionField::LoginScriptSend(0),
+        ] {
+            let normalized = normalize_clipboard_text_for_ime_target(
+                WorkspaceImeTarget::NewConnection(field),
+                "if [ -d /srv/app ]; then\r\n  cd /srv/app\rfi",
+            );
+            assert_eq!(
+                normalized.as_str(),
+                "if [ -d /srv/app ]; then\n  cd /srv/app\nfi"
+            );
+        }
+        assert_eq!(
+            normalize_clipboard_text_for_ime_target(
+                WorkspaceImeTarget::NewConnection(NewConnectionField::LoginScriptExpect(0)),
+                "ready\r\nprompt",
+            )
+            .as_str(),
+            "ready prompt"
+        );
     }
 
     #[test]

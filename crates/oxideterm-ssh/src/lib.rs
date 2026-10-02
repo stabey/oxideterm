@@ -91,3 +91,8 @@ pub use upstream_proxy::{
     dial_initial_tcp, parse_http_proxy_value, parse_socks5_proxy_value, probe_upstream_proxy_route,
     socks5_proxy_from_env, upstream_proxy_from_env,
 };
+
+pub use oxideterm_connections::{
+    LoginScriptError, LoginScriptStep, MAX_LOGIN_SCRIPT_STEPS, MAX_LOGIN_SCRIPT_TEXT_BYTES,
+    terminal_login_script,
+};

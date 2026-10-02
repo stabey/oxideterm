@@ -9,6 +9,7 @@ pub(super) struct SshParser {
     endpoint: String,
     // The session updates this on EOF/close; parsing cannot revive a retired transport.
     pub(super) transport_running: bool,
+    pub(super) login_script: Option<super::login_script::LoginScriptRunner>,
     pub(super) command_tx: Option<tokio::sync::mpsc::Sender<SshTransportCommand>>,
     pub(super) term: Arc<FairMutex<Term<LocalEventListener>>>,
     parser: Processor,
@@ -96,6 +97,7 @@ impl SshParser {
                 endpoint: format!("{}@{}:{}", config.username(), config.host(), config.port()),
                 command_tx: None,
                 transport_running: true,
+                login_script: None,
                 term,
                 parser: Processor::new(),
                 event_rx,
@@ -236,6 +238,42 @@ impl SshParser {
         Ok(())
     }
 
+    pub(super) fn start_login_script(&mut self, steps: Vec<oxideterm_ssh::LoginScriptStep>) {
+        if steps.is_empty() {
+            return;
+        }
+        match super::login_script::LoginScriptRunner::new(steps) {
+            Ok(mut runner) => {
+                let inputs = runner.advance(&[]);
+                self.login_script = Some(runner);
+                self.send_login_inputs(inputs);
+            }
+            Err(_) => self.pending_events.push(TerminalEvent::LoginScriptFailed),
+        }
+    }
+
+    fn send_login_inputs(&mut self, inputs: Vec<zeroize::Zeroizing<String>>) {
+        for input in inputs {
+            // Automation bypasses UI command history, while retaining terminal encoding.
+            let encoded = self.input_encoder.encode_text(&input);
+            if self
+                .send_command(SshTransportCommand::Data(encoded.into_owned()))
+                .is_err()
+            {
+                self.login_script = None;
+                self.pending_events.push(TerminalEvent::LoginScriptFailed);
+                return;
+            }
+        }
+        if self
+            .login_script
+            .as_ref()
+            .is_some_and(|runner| runner.finished())
+        {
+            self.login_script = None;
+        }
+    }
+
     pub(super) fn feed_transport_output(&mut self, bytes: &[u8]) {
         if self.trzsz_consumer.is_some() {
             self.feed_trzsz_transport_output(bytes);
@@ -346,6 +384,7 @@ impl SshParser {
         };
         let cursor = Cell::new(graphics_cursor_from_term(&term, size));
         let mut protocol_responses = Vec::new();
+        let mut login_inputs = Vec::new();
         self.graphics_ingress.advance_ordered(
             bytes,
             |segment| match segment {
@@ -354,6 +393,11 @@ impl SshParser {
                         self.pending_events.push(TerminalEvent::EncodingHint(hint));
                     }
                     let decoded = self.output_decoder.decode_to_utf8_bytes(&terminal_bytes);
+                    if login_inputs.is_empty() {
+                        if let Some(script) = self.login_script.as_mut() {
+                            login_inputs.extend(script.advance(decoded.as_ref()));
+                        }
+                    }
                     if let Some(stream) = self.trigger_stream.as_mut() {
                         stream.observe_bytes(decoded.as_ref(), |matched| {
                             self.pending_events
@@ -412,6 +456,7 @@ impl SshParser {
             || cursor.get(),
         );
         drop(term);
+        self.send_login_inputs(login_inputs);
         for response in protocol_responses {
             let _ = self.write_protocol_bytes(&response);
         }

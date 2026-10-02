@@ -131,6 +131,7 @@ pub struct ConnectionDraft {
     pub ssh_channel_strategy: crate::SshChannelStrategy,
     pub x11_forwarding: crate::ConnectionX11ForwardingOptions,
     pub post_connect_command: String,
+    pub login_script: Vec<crate::LoginScriptStep>,
     pub terminal: ConnectionTerminalOptions,
 }
 
@@ -294,6 +295,7 @@ pub fn save_request_from_draft(
         x11_forwarding: draft.x11_forwarding,
         post_connect_command: (!draft.post_connect_command.trim().is_empty())
             .then(|| draft.post_connect_command.trim().to_string()),
+        login_script: draft.login_script,
         terminal: draft.terminal,
     })
 }
@@ -736,6 +738,7 @@ mod tests {
             dedicated_new_terminal_connection: false,
             ssh_channel_strategy: crate::SshChannelStrategy::default(),
             post_connect_command: String::new(),
+            login_script: Vec::new(),
             terminal: ConnectionTerminalOptions::default(),
         };
 

@@ -105,6 +105,9 @@ fn validate_connection_store_version(data: &ConnectionStoreData) -> Result<()> {
             connection.version
         );
     }
+    for connection in &data.connections {
+        crate::validate_login_script(&connection.options.login_script)?;
+    }
     Ok(())
 }
 
@@ -112,6 +115,20 @@ fn encode_connection_store_data(
     data: &ConnectionStoreData,
     format: ConnectionStoreStorageFormat,
 ) -> Result<Vec<u8>> {
+    for connection in &data.connections {
+        crate::validate_login_script(&connection.options.login_script)?;
+    }
+    // Login responses may contain credentials. Reuse the protected config envelope
+    // even when this store was previously plaintext; never fall back after an encryption error.
+    let format = if data
+        .connections
+        .iter()
+        .any(|connection| !connection.options.login_script.is_empty())
+    {
+        ConnectionStoreStorageFormat::Encrypted
+    } else {
+        format
+    };
     match format {
         ConnectionStoreStorageFormat::Encrypted => {
             let (key, created_key) = get_or_create_config_encryption_key()?;
@@ -551,7 +568,9 @@ fn config_keychain_account() -> String {
 }
 
 #[cfg(test)]
-struct ConfigEncryptionKeyGuardForTests;
+struct ConfigEncryptionKeyGuardForTests {
+    _lock: std::sync::MutexGuard<'static, ()>,
+}
 
 #[cfg(test)]
 impl Drop for ConfigEncryptionKeyGuardForTests {
@@ -564,11 +583,13 @@ impl Drop for ConfigEncryptionKeyGuardForTests {
 fn with_config_encryption_key_for_tests(
     key: [u8; CONFIG_ENCRYPTION_KEY_LEN],
 ) -> ConfigEncryptionKeyGuardForTests {
+    static TEST_KEY_LOCK: Mutex<()> = Mutex::new(());
+    let lock = TEST_KEY_LOCK.lock().expect("test config key lock");
     clear_cached_config_encryption_key();
     // Tests inject the cached key to exercise encrypted fallback paths without
     // touching the real OS keychain or portable keystore.
     remember_config_encryption_key(&zeroize::Zeroizing::new(key));
-    ConfigEncryptionKeyGuardForTests
+    ConfigEncryptionKeyGuardForTests { _lock: lock }
 }
 
 #[cfg(test)]

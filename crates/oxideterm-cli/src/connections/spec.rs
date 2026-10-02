@@ -233,6 +233,9 @@ pub(super) fn connection_request_from_spec(
         x11_forwarding: existing
             .map(|connection| connection.options.x11_forwarding)
             .unwrap_or_default(),
+        login_script: existing
+            .map(|connection| connection.options.login_script.clone())
+            .unwrap_or_default(),
         post_connect_command: spec.post_connect_command.unwrap_or_else(|| {
             existing.and_then(|connection| connection.post_connect_command().map(ToOwned::to_owned))
         }),

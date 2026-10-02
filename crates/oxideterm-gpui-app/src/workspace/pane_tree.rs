@@ -631,7 +631,7 @@ impl WorkspaceApp {
     ) {
         let group_id = self.alloc_pane_id(cx);
         let Ok((pane_id, session_id)) =
-            self.create_ssh_terminal_pane_for_existing_node(&node_id, None, true, window, cx)
+            self.create_ssh_terminal_pane_for_existing_node(&node_id, Vec::new(), true, window, cx)
         else {
             return;
         };

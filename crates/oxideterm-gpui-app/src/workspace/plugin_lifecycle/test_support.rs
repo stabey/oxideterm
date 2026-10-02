@@ -203,6 +203,7 @@ pub(super) fn test_connection_store_with_agent_connection(
             dedicated_new_terminal_connection: false,
             ssh_channel_strategy: oxideterm_connections::SshChannelStrategy::default(),
             x11_forwarding: oxideterm_connections::ConnectionX11ForwardingOptions::default(),
+            login_script: Vec::new(),
             post_connect_command: None,
             terminal: oxideterm_connections::ConnectionTerminalOptions::default(),
         })

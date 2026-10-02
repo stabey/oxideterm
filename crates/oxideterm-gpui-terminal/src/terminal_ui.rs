@@ -116,6 +116,7 @@ pub struct TerminalUiPreferences {
     pub background: Option<TerminalBackgroundPreferences>,
     pub transparent_background: bool,
     pub processing_failed_message: String,
+    pub login_script_failed_message: String,
     pub paste_labels: TerminalPasteLabels,
     pub kitty_file_transmission_labels: TerminalKittyFileTransmissionLabels,
     pub autosuggest_labels: TerminalAutosuggestLabels,
@@ -238,6 +239,7 @@ impl Default for TerminalUiPreferences {
             render_policy: EffectiveRenderPolicy::quality(),
             background: None,
             transparent_background: false,
+            login_script_failed_message: String::new(),
             processing_failed_message:
                 "Terminal processing stopped. Reconnect this session to continue.".into(),
             paste_labels: TerminalPasteLabels::default(),

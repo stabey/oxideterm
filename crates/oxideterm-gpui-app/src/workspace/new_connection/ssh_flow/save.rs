@@ -1032,6 +1032,28 @@ impl WorkspaceApp {
                 state.mode(),
             )
         };
+        if transport == Some(NewConnectionTransport::Ssh) {
+            let error = self
+                .connection_form_state(cx)
+                .form
+                .as_ref()
+                .and_then(|form| {
+                    oxideterm_connections::validate_login_script(
+                        &super::super::form_state::login_script_from_form(form),
+                    )
+                    .err()
+                });
+            if let Some(error) = error {
+                let message = self.i18n.t(error.translation_key());
+                self.update_connection_form_state(cx, |state| {
+                    if let Some(form) = state.form.as_mut() {
+                        form.error = Some(message);
+                    }
+                });
+                cx.notify();
+                return;
+            }
+        }
         if matches!(
             transport,
             Some(

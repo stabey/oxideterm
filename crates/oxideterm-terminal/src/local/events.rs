@@ -91,6 +91,7 @@ pub enum TerminalEvent {
     // Failed startup must remain visible instead of triggering normal exit auto-close.
     StartupFailed,
     ProcessingFailed,
+    LoginScriptFailed,
     TmuxPaneSelected {
         selected: bool,
     },

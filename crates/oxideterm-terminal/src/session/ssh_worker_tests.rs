@@ -920,6 +920,76 @@ fn ssh_close_during_authentication_releases_the_startup_consumer() {
 }
 
 #[test]
+fn ssh_login_script_follows_channel_output_and_manual_input_cancels_remaining_steps() {
+    let mut fixture = Fixture::with_backend(
+        |config| {
+            SshPtySession::new(
+                config.with_login_script(vec![
+                    oxideterm_ssh::LoginScriptStep {
+                        expect: "ready> ".into(),
+                        send: "if true; then\n  pwd\nfi".into(),
+                        ..Default::default()
+                    },
+                    oxideterm_ssh::LoginScriptStep {
+                        expect: "next> ".into(),
+                        send: "must-not-send".into(),
+                        ..Default::default()
+                    },
+                ]),
+                80,
+                24,
+                Default::default(),
+                TerminalEncoding::Utf8,
+                100,
+            )
+        },
+        |terminal| wait_until(|| terminal.shared.finished.load(Ordering::Acquire)),
+    );
+    fixture.send(b"\x1b[32mrea");
+    assert!(
+        fixture
+            .input
+            .recv_timeout(Duration::from_millis(50))
+            .is_err()
+    );
+    fixture.send(b"dy>\x1b[0m ");
+    assert_eq!(
+        fixture
+            .input
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap()
+            .0,
+        b"if true; then\r  pwd\rfi\r"
+    );
+    fixture.terminal.write_text("manual\r").unwrap();
+    assert_eq!(
+        fixture
+            .input
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap()
+            .0,
+        b"manual\r"
+    );
+    fixture.send(b"next> ");
+    wait_until(|| {
+        fixture
+            .terminal
+            .shared
+            .core
+            .lock()
+            .parser_state
+            .login_script
+            .is_none()
+    });
+    assert!(
+        fixture
+            .input
+            .recv_timeout(Duration::from_millis(100))
+            .is_err()
+    );
+}
+
+#[test]
 fn ssh_deferred_shell_starts_after_layout_and_closes_without_stale_events() {
     let mut peer = ssh_peer::SshPeer::new();
     let mut config = peer.config.take().unwrap();

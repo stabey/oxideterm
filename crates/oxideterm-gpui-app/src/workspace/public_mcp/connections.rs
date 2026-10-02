@@ -372,6 +372,9 @@ fn save_profile(
                         .untrusted_timeout_seconds
                         .unwrap_or(DEFAULT_X11_UNTRUSTED_TIMEOUT_SECONDS),
                 },
+                login_script: existing
+                    .map(|connection| connection.options.login_script.clone())
+                    .unwrap_or_default(),
                 post_connect_command: profile.post_connect_command.clone(),
                 terminal: terminal_options(&profile.terminal),
             };

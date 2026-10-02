@@ -943,7 +943,7 @@ impl WorkspaceApp {
             let Ok((new_pane_id, new_session_id)) = self
                 .create_ssh_terminal_pane_for_existing_node(
                     node_id,
-                    None,
+                    Vec::new(),
                     allow_dedicated_connection,
                     window,
                     cx,

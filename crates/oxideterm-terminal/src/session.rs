@@ -148,6 +148,7 @@ include!("session/facade.rs");
 include!("session/playback.rs");
 include!("session/local_backend.rs");
 include!("session/ssh_config.rs");
+mod login_script;
 mod ssh_parser;
 use ssh_parser::SshParser;
 include!("session/ssh_pty.rs");

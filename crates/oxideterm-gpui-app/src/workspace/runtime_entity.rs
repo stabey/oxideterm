@@ -58,7 +58,7 @@ enum WorkspaceRuntimeLifecycle {
 #[derive(Debug)]
 pub(in crate::workspace) struct PendingSshTerminalOpen {
     pub(in crate::workspace) node_id: NodeId,
-    pub(in crate::workspace) post_connect_command: Option<String>,
+    pub(in crate::workspace) login_script: Vec<oxideterm_connections::LoginScriptStep>,
     pub(in crate::workspace) mark_used_connection_id: Option<String>,
     pub(in crate::workspace) save_after_open: Option<SaveConnectionRequest>,
     pub(in crate::workspace) cleanup_node_id: Option<NodeId>,
@@ -553,8 +553,8 @@ impl WorkspaceRuntimeEntity {
             if existing.save_after_open.is_none() {
                 existing.save_after_open = request.save_after_open.take();
             }
-            if existing.post_connect_command.is_none() {
-                existing.post_connect_command = request.post_connect_command.take();
+            if existing.login_script.is_empty() {
+                existing.login_script = std::mem::take(&mut request.login_script);
             }
             QueueSshTerminalOpenOutcome::Coalesced
         } else {
@@ -3687,7 +3687,7 @@ mod tests {
             let first = entity.queue_ssh_terminal_open(
                 PendingSshTerminalOpen {
                     node_id: node_id.clone(),
-                    post_connect_command: None,
+                    login_script: Vec::new(),
                     mark_used_connection_id: None,
                     save_after_open: None,
                     cleanup_node_id: None,
@@ -3698,7 +3698,7 @@ mod tests {
             let second = entity.queue_ssh_terminal_open(
                 PendingSshTerminalOpen {
                     node_id: node_id.clone(),
-                    post_connect_command: Some("pwd".to_string()),
+                    login_script: vec![oxideterm_connections::LoginScriptStep::command("pwd")],
                     mark_used_connection_id: Some("saved-a".to_string()),
                     save_after_open: None,
                     cleanup_node_id: None,
@@ -3715,7 +3715,10 @@ mod tests {
                 .front()
                 .expect("coalesced terminal request");
             assert_eq!(pending.title, "First terminal");
-            assert_eq!(pending.post_connect_command.as_deref(), Some("pwd"));
+            assert_eq!(
+                pending.login_script,
+                vec![oxideterm_connections::LoginScriptStep::command("pwd")]
+            );
             assert_eq!(pending.mark_used_connection_id.as_deref(), Some("saved-a"));
         });
     }
@@ -3728,7 +3731,7 @@ mod tests {
             let outcome = entity.queue_ssh_terminal_open(
                 PendingSshTerminalOpen {
                     node_id: node_id.clone(),
-                    post_connect_command: None,
+                    login_script: Vec::new(),
                     mark_used_connection_id: None,
                     save_after_open: None,
                     cleanup_node_id: None,

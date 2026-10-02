@@ -225,6 +225,7 @@ impl WorkspaceApp {
                 strict_host_key_checking: true,
                 post_connect_command: (!form.post_connect_command.trim().is_empty())
                     .then(|| form.post_connect_command.trim().to_string()),
+                login_script: super::super::form_state::login_script_from_form(form),
                 ..SshConfig::default()
             };
             let title = if form.name.trim().is_empty() {
@@ -916,10 +917,13 @@ impl WorkspaceApp {
                     node.ssh_channel_strategy = connection_options.ssh_channel_strategy;
                 }
                 self.update_connection_form_state(cx, ConnectionFormState::clear);
-                let post_connect_command = target_config.post_connect_command.clone();
+                let login_script = oxideterm_connections::terminal_login_script(
+                    target_config.post_connect_command.as_deref(),
+                    &target_config.login_script,
+                );
                 let _ = self.queue_ssh_terminal_tab_for_node_with_mark_used(
                     target_node_id,
-                    post_connect_command,
+                    login_script,
                     target_config,
                     run.title,
                     None,
@@ -950,10 +954,13 @@ impl WorkspaceApp {
                 self.session_manager.update(cx, |session_manager, cx| {
                     session_manager.set_status(None, cx);
                 });
-                let post_connect_command = target_config.post_connect_command.clone();
+                let login_script = oxideterm_connections::terminal_login_script(
+                    target_config.post_connect_command.as_deref(),
+                    &target_config.login_script,
+                );
                 let _ = self.queue_ssh_terminal_tab_for_node_with_mark_used(
                     target_node_id,
-                    post_connect_command,
+                    login_script,
                     target_config,
                     run.title,
                     Some(id.clone()),
@@ -1220,11 +1227,13 @@ impl WorkspaceApp {
                                 .node_runtime_snapshot(&expansion.target_node_id)
                                 .map(|snapshot| snapshot.config)
                             {
-                                let post_connect_command =
-                                    target_config.post_connect_command.clone();
+                                let login_script = oxideterm_connections::terminal_login_script(
+                                    target_config.post_connect_command.as_deref(),
+                                    &target_config.login_script,
+                                );
                                 let _ = self.queue_ssh_terminal_tab_for_node_with_mark_used(
                                     expansion.target_node_id,
-                                    post_connect_command,
+                                    login_script,
                                     target_config,
                                     title,
                                     None,
@@ -1251,10 +1260,13 @@ impl WorkspaceApp {
                         connection_options.dedicated_new_terminal_connection;
                     node.ssh_channel_strategy = connection_options.ssh_channel_strategy;
                 }
-                let post_connect_command = config.post_connect_command.clone();
+                let login_script = oxideterm_connections::terminal_login_script(
+                    config.post_connect_command.as_deref(),
+                    &config.login_script,
+                );
                 let _ = self.queue_ssh_terminal_tab_for_node_with_mark_used(
                     node_id,
-                    post_connect_command,
+                    login_script,
                     config,
                     title,
                     None,
