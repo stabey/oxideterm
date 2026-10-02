@@ -297,6 +297,8 @@
       "show_performance_overlay_hint": "Mostra il livello di rendering corrente (B=boost/N=normale/I=inattivo), gli eventi di scrittura al secondo e i byte in attesa nell'angolo del terminale",
       "highlight_tab_on_new_output": "Evidenzia le schede con nuovo output",
       "highlight_tab_on_new_output_hint": "Usa un colore evidente per l’icona e il titolo delle schede terminale in background quando arriva un nuovo output",
+      "close_on_exit": "Chiudi automaticamente i terminali all’uscita",
+      "close_on_exit_hint": "Disattiva per mantenere schede, riquadri divisi e output dopo la chiusura della shell. La shell continua a terminare normalmente.",
       "cursor": "Cursore",
       "cursor_style": "Stile Cursore",
       "cursor_style_hint": "Forma del cursore del testo",

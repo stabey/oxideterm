@@ -447,6 +447,21 @@ pub trait SshPromptHandler: Send + Sync {
     >;
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SshShellExit {
+    Status(u32),
+    Signal,
+}
+
+impl SshShellExit {
+    pub fn exit_code(self) -> Option<i32> {
+        match self {
+            Self::Status(status) => i32::try_from(status).ok(),
+            Self::Signal => None,
+        }
+    }
+}
+
 pub struct SshPtyHandle {
     audit: Option<oxideterm_audit::AuditContext>,
     pub session_id: String,
@@ -454,6 +469,7 @@ pub struct SshPtyHandle {
     pub output_rx: SshOutputReceiver,
     auth_banners: AuthBannerSink,
     shell_started: Arc<AtomicBool>,
+    shell_exit: Arc<RwLock<Option<SshShellExit>>>,
     ssh_connection: Option<SshConnectionHandle>,
     registry_release: Option<(SshConnectionRegistry, String, ConnectionConsumer)>,
 }
@@ -778,6 +794,10 @@ impl SshPtyHandle {
 
     pub fn shell_started(&self) -> bool {
         self.shell_started.load(Ordering::Acquire)
+    }
+
+    pub fn shell_exit(&self) -> Option<SshShellExit> {
+        *self.shell_exit.read()
     }
 
     pub fn ssh_connection_handle(&self) -> Option<SshConnectionHandle> {

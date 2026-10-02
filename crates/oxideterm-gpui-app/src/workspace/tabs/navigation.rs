@@ -606,7 +606,7 @@ impl WorkspaceApp {
         // terminal session id. Keep SFTP/forwards tabs from surviving as orphaned
         // node-scoped surfaces after an explicit disconnect.
         for affected_node_id in &nodes_to_disconnect {
-            self.close_tabs_for_node(affected_node_id, window, cx);
+            self.close_tabs_for_node(affected_node_id, false, window, cx);
         }
         let disconnected_nodes = self.workspace_runtime.update(cx, |runtime, cx| {
             runtime.disconnect_node_runtime_subtree(node_id, cx)
@@ -1219,6 +1219,7 @@ impl WorkspaceApp {
     pub(super) fn close_tabs_for_node(
         &mut self,
         node_id: &NodeId,
+        preserve_terminals: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -1245,6 +1246,9 @@ impl WorkspaceApp {
             .collect::<Vec<_>>();
         for (tab_id, panes) in targets {
             if let Some(panes) = panes {
+                if preserve_terminals {
+                    continue;
+                }
                 for pane in panes {
                     self.close_terminal_pane_in_tab(tab_id, pane, window, cx);
                 }

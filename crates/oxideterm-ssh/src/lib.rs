@@ -83,7 +83,7 @@ pub use transport::{
     KeyboardInteractiveResponses, ManagedKeyMaterial, ManagedKeyResolver, RemoteForwardHandler,
     RemoteForwardedTcpIp, SshCommandOutput, SshForwardStream, SshOutputBoundary,
     SshOutputCancellation, SshOutputChunk, SshPromptError, SshPromptHandler, SshPtyHandle,
-    SshSecretCommandOutput, SshShellChannel, SshTransportClient, SshTransportCommand,
+    SshSecretCommandOutput, SshShellChannel, SshShellExit, SshTransportClient, SshTransportCommand,
     SshTransportError, X11ForwardHandler, X11ForwardedChannel,
 };
 pub use upstream_proxy::{

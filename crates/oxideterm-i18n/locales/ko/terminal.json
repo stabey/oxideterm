@@ -1,5 +1,6 @@
 {
   "terminal": {
+    "exited_retained": "셸이 종료되었습니다. 이전 출력이 유지됩니다.",
     "control_bar": {
       "show_controls": "조작 메뉴 펼치기",
       "hide_controls": "조작 메뉴 접기"

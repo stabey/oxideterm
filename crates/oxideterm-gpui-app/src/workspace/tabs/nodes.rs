@@ -161,7 +161,7 @@ impl WorkspaceApp {
             // A failed node can still own stale tabs, reconnect jobs, forwards,
             // or transfer records. Clear those owners before dropping the tree.
             self.close_embedded_sftp_for_node(node_id, cx);
-            self.close_tabs_for_node(node_id, window, cx);
+            self.close_tabs_for_node(node_id, false, window, cx);
             let _ = self.interrupt_sftp_transfers_by_node(
                 node_id,
                 "Connection removed".to_string(),
@@ -596,12 +596,10 @@ impl WorkspaceApp {
                     if nodes_to_close.is_empty() {
                         nodes_to_close.push(node_id.clone());
                     }
-                    // Tauri's connection_status_changed(disconnected) handler
-                    // closes tabs by root and affected child node ids; native
-                    // must do the same for node-scoped SFTP/IDE/forwards tabs,
-                    // not only for terminal panes.
+                    // A transport disconnect is not a shell exit. Retain terminal
+                    // identities for reconnect; explicit node removal owns tab closure.
                     for affected_node_id in nodes_to_close {
-                        self.close_tabs_for_node(&affected_node_id, window, cx);
+                        self.close_tabs_for_node(&affected_node_id, true, window, cx);
                     }
                 }
                 true
@@ -715,10 +713,10 @@ impl WorkspaceApp {
                         if nodes_to_close.is_empty() {
                             nodes_to_close.push(node_id.clone());
                         }
-                        // Internal node:state disconnects are the native form
-                        // of the same Tauri terminal cleanup boundary.
+                        // Runtime disconnect notifications can precede reconnect.
+                        // Only explicit user closure may remove these terminals.
                         for affected_node_id in nodes_to_close {
-                            self.close_tabs_for_node(&affected_node_id, window, cx);
+                            self.close_tabs_for_node(&affected_node_id, true, window, cx);
                         }
                     }
                 }
@@ -918,6 +916,117 @@ impl WorkspaceApp {
         affected.len()
     }
 
+    pub(in crate::workspace) fn reopen_ssh_terminal(
+        &mut self,
+        session_id: TerminalSessionId,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(node_id) = self
+            .workspace_runtime
+            .read(cx)
+            .ssh_terminal_node_id(session_id)
+        else {
+            return;
+        };
+        let Some(location) = self.tab_host.read(cx).terminal_location(session_id) else {
+            return;
+        };
+        if self
+            .tab_host
+            .read(cx)
+            .panes()
+            .get(&location.pane_id)
+            .is_none_or(|pane| pane.read(cx).lifecycle().is_running())
+        {
+            return;
+        }
+        let title = self
+            .ssh_nodes
+            .get(&node_id)
+            .map(|node| node.title.clone())
+            .unwrap_or_default();
+        let outcome = self.workspace_runtime.update(cx, |runtime, runtime_cx| {
+            runtime.queue_ssh_terminal_open(
+                runtime_entity::PendingSshTerminalOpen {
+                    replace_session: Some(session_id),
+                    node_id: node_id.clone(),
+                    post_connect_command: None,
+                    mark_used_connection_id: None,
+                    save_after_open: None,
+                    cleanup_node_id: None,
+                    title,
+                },
+                runtime_cx,
+            )
+        });
+        if outcome == runtime_entity::QueueSshTerminalOpenOutcome::WorkspaceShuttingDown {
+            return;
+        }
+        // A live node owns the shared transport; only an unavailable node needs reconnecting.
+        if !self.node_is_ready_for_terminal(&node_id) {
+            self.ensure_node_connection_started(&node_id, cx);
+        }
+        cx.notify();
+    }
+
+    pub(in crate::workspace) fn replace_ssh_terminal_session(
+        &mut self,
+        node_id: &NodeId,
+        old_session_id: TerminalSessionId,
+        allow_dedicated_connection: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Result<TerminalSessionId> {
+        let location = self
+            .tab_host
+            .read(cx)
+            .terminal_location(old_session_id)
+            .ok_or_else(|| anyhow::anyhow!("Terminal is no longer open"))?;
+        let (new_pane_id, new_session_id) = self.create_ssh_terminal_pane_for_existing_node(
+            node_id,
+            None,
+            allow_dedicated_connection,
+            Some(old_session_id),
+            window,
+            cx,
+        )?;
+        let replaced = self.tab_host.update(cx, |host, _| {
+            host.replace_terminal_session(
+                location.tab_id,
+                old_session_id,
+                location.pane_id,
+                new_pane_id,
+                new_session_id,
+            )
+        });
+        let Some(replaced_pane_id) = replaced else {
+            self.terminal_saved_connection_refs.remove(&new_session_id);
+            self.clear_terminal_trigger_session_overrides(new_session_id);
+            if let Some(pane) = self.remove_terminal_pane(&new_pane_id, cx) {
+                let _ = pane.update(cx, |pane, _| pane.shutdown());
+            }
+            self.unregister_ssh_terminal_session(new_session_id, cx);
+            anyhow::bail!("Terminal is no longer open");
+        };
+        self.terminal.update(cx, |terminal, _| {
+            terminal
+                .sync_groups_mut()
+                .remount(replaced_pane_id, new_pane_id);
+        });
+        self.remount_public_mcp_terminal_session(old_session_id, new_session_id, cx);
+        if let Some(pane) = self.remove_terminal_pane(&replaced_pane_id, cx) {
+            let _ = pane.update(cx, |pane, _| pane.shutdown());
+        }
+        self.bind_terminal_location(location.tab_id, new_pane_id, new_session_id, cx);
+        self.pending_auto_close_terminal_sessions
+            .remove(&old_session_id);
+        self.terminal_saved_connection_refs.remove(&old_session_id);
+        self.clear_terminal_trigger_session_overrides(old_session_id);
+        self.unregister_ssh_terminal_session(old_session_id, cx);
+        cx.notify();
+        Ok(new_session_id)
+    }
+
     fn remount_terminal_panes_for_reconnect(
         &mut self,
         node_id: &NodeId,
@@ -934,51 +1043,11 @@ impl WorkspaceApp {
                 continue;
             };
             let old_session_id = TerminalSessionId(raw_old_session_id);
-            let Some(location) = self.tab_host.read(cx).terminal_location(old_session_id) else {
-                continue;
-            };
-            let tab_id = location.tab_id;
-            let old_pane_id = location.pane_id;
-            let allow_dedicated_connection = remounted > 0;
-            let Ok((new_pane_id, new_session_id)) = self
-                .create_ssh_terminal_pane_for_existing_node(
-                    node_id,
-                    None,
-                    allow_dedicated_connection,
-                    window,
-                    cx,
-                )
-            else {
-                continue;
-            };
-
-            let replaced = self.tab_host.update(cx, |tab_host, _| {
-                tab_host.replace_terminal_session(
-                    tab_id,
-                    old_session_id,
-                    old_pane_id,
-                    new_pane_id,
-                    new_session_id,
-                )
-            });
-            if let Some(replaced_pane_id) = replaced {
-                self.terminal.update(cx, |terminal, _| {
-                    terminal
-                        .sync_groups_mut()
-                        .remount(replaced_pane_id, new_pane_id);
-                });
-                self.remount_public_mcp_terminal_session(old_session_id, new_session_id, cx);
-                if let Some(pane) = self.remove_terminal_pane(&replaced_pane_id, cx) {
-                    let _ = pane.update(cx, |pane, _cx| pane.shutdown());
-                }
-                self.bind_terminal_location(tab_id, new_pane_id, new_session_id, cx);
-                self.unregister_ssh_terminal_session(old_session_id, cx);
+            if self
+                .replace_ssh_terminal_session(node_id, old_session_id, remounted > 0, window, cx)
+                .is_ok()
+            {
                 remounted += 1;
-            } else {
-                if let Some(pane) = self.remove_terminal_pane(&new_pane_id, cx) {
-                    let _ = pane.update(cx, |pane, _cx| pane.shutdown());
-                }
-                self.unregister_ssh_terminal_session(new_session_id, cx);
             }
         }
         if remounted > 0 {

@@ -297,6 +297,8 @@
       "show_performance_overlay_hint": "ターミナルの隅に現在のレンダリング段階（B=ブースト/N=通常/I=アイドル）、1秒あたりの書き込みイベント数、保留中のバイト数を表示します",
       "highlight_tab_on_new_output": "新しい出力があるタブを強調表示",
       "highlight_tab_on_new_output_hint": "バックグラウンドのターミナルに新しい出力が届いたとき、タブのアイコンとタイトルを目立つ色で表示します",
+      "close_on_exit": "終了時にターミナルを自動的に閉じる",
+      "close_on_exit_hint": "オフにすると、シェル終了後もタブ、分割ペイン、出力を保持します。シェル自体は通常どおり終了します。",
       "cursor": "カーソル",
       "cursor_style": "カーソルスタイル",
       "cursor_style_hint": "テキストカーソルの形状",

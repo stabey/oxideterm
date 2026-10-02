@@ -291,6 +291,10 @@ fn default_confirm_before_closing_ssh() -> bool {
     true
 }
 
+fn default_terminal_close_on_exit() -> bool {
+    true
+}
+
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum TerminalSemanticScheme {
@@ -425,6 +429,9 @@ pub struct TerminalSettings {
     // Existing installations keep the protective prompt until the user opts out.
     #[serde(default = "default_confirm_before_closing_ssh")]
     pub confirm_before_closing_ssh: bool,
+    // Preserve automatic tab removal for existing settings until the user opts out.
+    #[serde(default = "default_terminal_close_on_exit")]
+    pub close_on_exit: bool,
     pub selection_requires_shift: bool,
     // Keep the legacy JSON key so local and cloud-synced settings remain compatible.
     #[serde(default, rename = "freeTypeCursorPositioning")]
@@ -571,6 +578,7 @@ impl Default for TerminalSettings {
             open_links_with_modifier: true,
             detect_file_paths_as_links: true,
             confirm_before_closing_ssh: true,
+            close_on_exit: true,
             selection_requires_shift: false,
             free_type_mode: false,
             autosuggest: TerminalAutosuggestSettings::default(),
@@ -683,7 +691,7 @@ mod tests {
 
     #[test]
     fn terminal_settings_restore_legacy_boolean_defaults() {
-        let defaults: [(&str, bool, fn(&TerminalSettings) -> bool); 11] = [
+        let defaults: [(&str, bool, fn(&TerminalSettings) -> bool); 12] = [
             ("smoothScroll", true, |settings| settings.smooth_scroll),
             ("osc52ClipboardRead", false, |settings| {
                 settings.osc52_clipboard_read
@@ -691,6 +699,7 @@ mod tests {
             ("confirmBeforeClosingSsh", true, |settings| {
                 settings.confirm_before_closing_ssh
             }),
+            ("closeOnExit", true, |settings| settings.close_on_exit),
             ("openLinksWithModifier", true, |settings| {
                 settings.open_links_with_modifier
             }),

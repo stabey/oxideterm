@@ -1,5 +1,6 @@
 {
   "terminal": {
+    "exited_retained": "终端已退出，历史输出已保留。",
     "control_bar": {
       "show_controls": "展开操作栏",
       "hide_controls": "收起操作栏"

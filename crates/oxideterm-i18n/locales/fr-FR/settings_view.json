@@ -297,6 +297,8 @@
       "show_performance_overlay_hint": "Affiche le niveau de rendu actuel (B=boost/N=normal/I=inactif), les événements d'écriture par seconde et les octets en attente dans le coin du terminal",
       "highlight_tab_on_new_output": "Mettre en évidence les onglets avec une nouvelle sortie",
       "highlight_tab_on_new_output_hint": "Utiliser une couleur visible pour l’icône et le titre des onglets de terminal en arrière-plan lors d’une nouvelle sortie",
+      "close_on_exit": "Fermer automatiquement les terminaux à la sortie",
+      "close_on_exit_hint": "Désactivez cette option pour conserver les onglets, les volets divisés et la sortie après la fermeture du shell. Le shell se termine toujours normalement.",
       "cursor": "Curseur",
       "cursor_style": "Style de curseur",
       "cursor_style_hint": "Forme du curseur de texte",

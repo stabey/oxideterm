@@ -945,6 +945,12 @@ impl TerminalSessionBackend for SshPtySession {
         self.shared.core.lock().buffer_text()
     }
 
+    fn screen_history(&self) -> Option<alacritty_terminal::term::ScreenHistory> {
+        let core = self.shared.core.lock();
+        let history = core.parser_state.term.lock().screen_history();
+        Some(history)
+    }
+
     fn snapshot(&self) -> TerminalSnapshot {
         self.shared.core.lock().snapshot()
     }
